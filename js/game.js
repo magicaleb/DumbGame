@@ -196,11 +196,17 @@ class Player{
       else if(this.jumpCount>0){ this.vy = -650; this.jumpCount=0; SoundManager.sfxJump(); particlesJump(this.x+this.w/2,this.y+this.h); }
     }
 
-    // special ability
+    // special ability with directional input
     if(special && this.attackCooldown<=0 && !this.specialCooldown){ 
       this.attackCooldown = 0.3; 
       this.specialCooldown = 0.8; // Reduced cooldown for more fun
-      this.doSpecial(); 
+      
+      // Detect direction for special
+      let direction = 'neutral';
+      if(jump) direction = 'up';
+      else if(input.isDown(this.controls.down)) direction = 'down';
+      
+      this.doSpecial(direction); 
     }
     
     // ultimate ability (new key binding)
@@ -210,10 +216,16 @@ class Player{
       this.doUltimate();
     }
     
-    // attack
+    // attack with directional input
     if(attack && this.attackCooldown<=0 && this.hitstun <= 0){ 
       this.attackCooldown = 0.25 / this.stats.speed; // Speed affects attack speed
-      this.doAttack(other); 
+      
+      // Detect direction for attack
+      let attackDirection = 'neutral';
+      if(jump) attackDirection = 'up';
+      else if(input.isDown(this.controls.down)) attackDirection = 'down';
+      
+      this.doAttack(other, attackDirection); 
     }
 
     // simple ledge grab logic: if falling near platform edge, allow grab
@@ -260,8 +272,8 @@ class Player{
       }
     }
 
-  // check off-screen for KO
-  if(this.y > H+300){ this.loseStock(); }
+  // check off-screen for KO or 175% damage
+  if(this.y > H+300 || this.damage >= 175){ this.loseStock(); }
 
     // Update timers
     if(this.attackCooldown>0) this.attackCooldown -= dt;
@@ -289,11 +301,38 @@ class Player{
     this.anim.t += dt; if(this.anim.t > 0.12){ this.anim.t = 0; this.anim.frame = (this.anim.frame+1)%4; }
   }
 
-  doAttack(other){
-    // Enhanced attack with stat scaling
-    const range = (50 + Math.min(200, this.damage*0.5)) * this.stats.power;
-    const hx = this.facing===1 ? this.x+this.w : this.x-range;
-    const hy = this.y + 20; const hw = range; const hh = 30;
+  doAttack(other, direction = 'neutral'){
+    // Enhanced attack with stat scaling and directional variants
+    let range = (50 + Math.min(200, this.damage*0.5)) * this.stats.power;
+    let hx, hy, hw, hh;
+    let knockModifierX = 1, knockModifierY = 1;
+    let damageModifier = 1;
+    
+    // Directional attack variants
+    if(direction === 'up') {
+      // Upward attack - anti-air
+      hx = this.x - 10;
+      hy = this.y - 40;
+      hw = this.w + 20;
+      hh = 50;
+      knockModifierY = 2; // Strong upward knockback
+      damageModifier = 1.2; // Stronger damage
+    } else if(direction === 'down') {
+      // Downward attack - spike
+      hx = this.x - 5;
+      hy = this.y + this.h - 10;
+      hw = this.w + 10;
+      hh = 30;
+      knockModifierY = -1; // Downward spike
+      damageModifier = 1.3; // Very strong spike
+    } else {
+      // Normal horizontal attack
+      hx = this.facing===1 ? this.x+this.w : this.x-range;
+      hy = this.y + 20;
+      hw = range;
+      hh = 30;
+    }
+    
     SoundManager.sfxAttack();
     
     // Check for special dash attack
@@ -321,13 +360,13 @@ class Player{
         return;
       }
       
-      const baseDmg = isDashAttack ? 10 : 8;
+      const baseDmg = (isDashAttack ? 10 : 8) * damageModifier;
       const dmg = baseDmg * this.stats.power * (this.specialEffects.berserker ? 1.4 : 1);
       const knockFactor = (12 + other.damage*0.12) * this.stats.power;
       const defenseReduction = 1 / other.stats.defense;
       
-      const kx = this.facing*knockFactor*25*defenseReduction*(1 + other.damage*0.008);
-      const ky = -420*defenseReduction*(1 + other.damage*0.012);
+      const kx = this.facing*knockFactor*25*defenseReduction*(1 + other.damage*0.008)*knockModifierX;
+      const ky = -420*defenseReduction*(1 + other.damage*0.012)*knockModifierY;
       
       if(other.invulnerable<=0){ 
         other.hurt(dmg*defenseReduction, {x:kx, y:ky}); 
@@ -343,72 +382,77 @@ class Player{
     }
   }
 
-  doSpecial(){
+  doSpecial(direction = 'neutral'){
     const specials = {
-      // Player 1 specials
+      // Shared specials for both players (now only 5)
       fireball: () => {
         const speed = 500 * this.stats.power;
-        projectiles.push(new Projectile(this.x+this.w/2, this.y+30, this.facing*speed, -20, this.id, 'fireball'));
+        let vx = this.facing * speed;
+        let vy = -20;
+        
+        // Directional variants
+        if(direction === 'up') vy = -400; // Upward fireball
+        if(direction === 'down') vy = 200; // Downward fireball
+        
+        projectiles.push(new Projectile(this.x+this.w/2, this.y+30, vx, vy, this.id, 'fireball'));
         SoundManager.sfxPower();
       },
       lightning: () => {
-        // Instant hit across screen
-        const target = this.id === 1 ? p2 : p1;
-        if(Math.abs(target.x - this.x) < W/2) {
-          target.hurt(12 * this.stats.power, {x: this.facing*300, y: -200});
-          effects.push({type:'lightning', x: this.x, y: this.y, t: 0.3});
-          SoundManager.beep(1200, 0.1, 0.08);
-        }
+        // Lightning strike with directional control
+        let strikeX = this.x + this.w/2 + this.facing * 100;
+        let strikeY = 0;
+        
+        if(direction === 'up') strikeY = this.y - 200; // Lightning above
+        else if(direction === 'down') strikeY = this.y + 100; // Lightning below
+        
+        projectiles.push(new Projectile(strikeX, strikeY, 0, 800, this.id, 'lightning'));
+        SoundManager.beep(1200, 0.1, 0.08);
+        screenShake(8);
       },
       shield: () => {
-        this.specialEffects.shield = 3.0; // 3 second shield
+        let shieldDuration = 3.0;
+        if(direction === 'up') shieldDuration = 5.0; // Stronger overhead shield
+        if(direction === 'down') shieldDuration = 2.0; // Quick ground shield
+        
+        this.specialEffects.shield = shieldDuration;
         SoundManager.beep(600, 0.2, 0.06);
+        particlesHit(this.x+this.w/2, this.y+this.h/2);
       },
       teleport: () => {
-        const target = this.id === 1 ? p2 : p1;
-        const behindX = target.x + (target.facing * -60);
-        this.x = Math.max(0, Math.min(W-this.w, behindX));
-        this.y = target.y;
+        let newX = this.x;
+        let newY = this.y;
+        
+        if(direction === 'up') {
+          newY = Math.max(50, this.y - 150); // Teleport up
+        } else if(direction === 'down') {
+          newY = Math.min(H-200, this.y + 100); // Teleport down
+        } else {
+          // Teleport behind opponent
+          const target = this.id === 1 ? p2 : p1;
+          newX = target.x + (target.facing * -60);
+          newY = target.y;
+        }
+        
+        this.x = Math.max(0, Math.min(W-this.w, newX));
+        this.y = newY;
+        this.invulnerable = 0.3;
         particlesJump(this.x+this.w/2, this.y+this.h);
         SoundManager.beep(800, 0.15, 0.06);
       },
-      multi: () => {
-        // 3-hit combo
-        for(let i = 0; i < 3; i++){
-          setTimeout(() => {
-            const target = this.id === 1 ? p2 : p1;
-            if(Math.abs(target.x - this.x) < 100 && Math.abs(target.y - this.y) < 80){
-              target.hurt(4 * this.stats.power, {x: this.facing*150*(i+1), y: -100*(i+1)});
-              particlesHit(target.x+target.w/2, target.y+target.h/2);
-              SoundManager.sfxRandomPunch();
-            }
-          }, i * 200);
-        }
-      },
-      
-      // Player 2 specials  
       dash: () => {
-        this.vx += this.facing * 800 * this.stats.speed;
-        this.specialEffects.dashAttack = 0.5; // damage on contact for 0.5s
+        if(direction === 'up') {
+          this.vy = -700; // Dash upward
+          this.vx = this.facing * 600 * this.stats.speed * 0.7;
+        } else if(direction === 'down') {
+          this.vy = 400; // Slam downward
+          this.specialEffects.slamAttack = 1.0;
+        } else {
+          this.vx = this.facing * 800 * this.stats.speed; // Horizontal dash
+        }
+        
+        this.specialEffects.dashAttack = 0.5;
         SoundManager.sfxAttack();
-      },
-      slam: () => {
-        this.vy = -300;
-        this.specialEffects.slamming = true;
-        SoundManager.beep(300, 0.2, 0.08);
-      },
-      counter: () => {
-        this.specialEffects.counter = 2.0; // counter window
-        SoundManager.beep(700, 0.1, 0.05);
-      },
-      freeze: () => {
-        const target = this.id === 1 ? p2 : p1;
-        target.specialEffects.frozen = 2.0;
-        SoundManager.beep(400, 0.3, 0.06);
-      },
-      berserker: () => {
-        this.specialEffects.berserker = 5.0; // 5 seconds of enhanced stats
-        SoundManager.beep(200, 0.4, 0.08);
+        particlesJump(this.x, this.y+this.h);
       }
     };
     
@@ -433,12 +477,30 @@ class Player{
         screenShake(15);
       },
       dash: () => {
-        // Super dash with invincibility
-        this.vx = this.facing * 1200;
-        this.invulnerable = 1.0;
-        this.specialEffects.ultimateDash = 1.0;
-        SoundManager.beep(100, 0.6, 0.1);
-        screenShake(12);
+        // Energy Wave Ultimate - creates expanding shockwave
+        this.specialEffects.energyWave = 2.0; // Duration of wave effect
+        
+        // Create multiple wave projectiles in all directions
+        for(let angle = 0; angle < 360; angle += 30) {
+          const radian = (angle * Math.PI) / 180;
+          const speed = 400;
+          const vx = Math.cos(radian) * speed;
+          const vy = Math.sin(radian) * speed;
+          
+          setTimeout(() => {
+            projectiles.push(new Projectile(this.x+this.w/2, this.y+this.h/2, vx, vy, this.id, 'ultimate'));
+          }, angle * 2); // Stagger the waves
+        }
+        
+        // Add screen-clearing effect and massive knockback resistance
+        this.invulnerable = 0.5;
+        screenShake(20);
+        SoundManager.beep(100, 0.8, 0.15);
+        
+        // Visual effect
+        for(let i = 0; i < 20; i++) {
+          particlesHit(this.x + this.w/2 + (Math.random()-0.5)*100, this.y + this.h/2 + (Math.random()-0.5)*100);
+        }
       }
     };
     
@@ -542,8 +604,8 @@ const projectiles = [];
 const particles = [];
 let shake = {time:0,magnitude:0};
 
-const p1 = new Player(1, stage.spawnPoints[0].x, stage.spawnPoints[0].y, {left:'KeyA',right:'KeyD',up:'KeyW',attack:'KeyF',special:'KeyG',ultimate:'KeyH'});
-const p2 = new Player(2, stage.spawnPoints[1].x, stage.spawnPoints[1].y, {left:'ArrowLeft',right:'ArrowRight',up:'ArrowUp',attack:'KeyK',special:'KeyL',ultimate:'Semicolon'});
+const p1 = new Player(1, stage.spawnPoints[0].x, stage.spawnPoints[0].y, {left:'KeyA',right:'KeyD',up:'KeyW',down:'KeyS',attack:'KeyF',special:'KeyG',ultimate:'KeyH'});
+const p2 = new Player(2, stage.spawnPoints[1].x, stage.spawnPoints[1].y, {left:'ArrowLeft',right:'ArrowRight',up:'ArrowUp',down:'ArrowDown',attack:'KeyK',special:'KeyL',ultimate:'Semicolon'});
 let cpuEnabled = false; let cpuDifficulty = 'med';
 
 // basic CPU controller for p2 when enabled

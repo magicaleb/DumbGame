@@ -22,7 +22,14 @@
                 <label><input type="radio" name="p1-special" value="lightning"> ⚡ Lightning</label>
                 <label><input type="radio" name="p1-special" value="shield"> 🛡️ Shield</label>
                 <label><input type="radio" name="p1-special" value="teleport"> 🌀 Teleport</label>
-                <label><input type="radio" name="p1-special" value="multi"> 💥 Multi-Hit</label>
+                <label><input type="radio" name="p1-special" value="dash"> 🚀 Dash</label>
+              </div>
+              <div class="ability-descriptions">
+                <p><strong>� Fireball:</strong> Projectile attack. Up/Down changes trajectory.</p>
+                <p><strong>⚡ Lightning:</strong> Fast lightning strike. Direction controls placement.</p>
+                <p><strong>🛡️ Shield:</strong> Absorbs attacks. Up = stronger, Down = quicker.</p>
+                <p><strong>🌀 Teleport:</strong> Instant movement. Up/Down teleports vertically.</p>
+                <p><strong>🚀 Dash:</strong> Speed burst. Up = air dash, Down = ground slam.</p>
               </div>
               <div class="stat-sliders">
                 <label>Speed: <input type="range" id="p1-speed" min="0.5" max="1.5" step="0.1" value="1.0"></label>
@@ -34,11 +41,18 @@
             <div class="player-setup">
               <h3>Player 2 (Arrows+K/L/;)</h3>
               <div class="special-grid">
+                <label><input type="radio" name="p2-special" value="fireball"> � Fireball</label>
+                <label><input type="radio" name="p2-special" value="lightning"> ⚡ Lightning</label>
+                <label><input type="radio" name="p2-special" value="shield"> 🛡️ Shield</label>
+                <label><input type="radio" name="p2-special" value="teleport"> 🌀 Teleport</label>
                 <label><input type="radio" name="p2-special" value="dash" checked> 🚀 Dash</label>
-                <label><input type="radio" name="p2-special" value="slam"> 💢 Ground Slam</label>
-                <label><input type="radio" name="p2-special" value="counter"> ⚔️ Counter</label>
-                <label><input type="radio" name="p2-special" value="freeze"> ❄️ Freeze</label>
-                <label><input type="radio" name="p2-special" value="berserker"> 😤 Berserker</label>
+              </div>
+              <div class="ability-descriptions">
+                <p><strong>🔥 Fireball:</strong> Projectile attack. Up/Down changes trajectory.</p>
+                <p><strong>⚡ Lightning:</strong> Fast lightning strike. Direction controls placement.</p>
+                <p><strong>�️ Shield:</strong> Absorbs attacks. Up = stronger, Down = quicker.</p>
+                <p><strong>🌀 Teleport:</strong> Instant movement. Up/Down teleports vertically.</p>
+                <p><strong>🚀 Dash:</strong> Speed burst. Up = air dash, Down = ground slam.</p>
               </div>
               <div class="stat-sliders">
                 <label>Speed: <input type="range" id="p2-speed" min="0.5" max="1.5" step="0.1" value="1.0"></label>
@@ -55,7 +69,8 @@
             <label>AI Difficulty: <select id="opt-diff"><option value="easy">Easy</option><option value="med" selected>Normal</option><option value="hard">Hard</option></select></label>
           </div>
           <button id="btn-start">Start Match</button>
-          <p class="hint">Move: A/D or ←/→ • Jump: W or ↑ • Attack: F or K • Special: G or L • Ultimate: H or ;</p>
+          <p class="hint">Move: A/D or ←/→ • Jump: W or ↑ • Attack: F or K • Special: G or L • Ultimate: H or ;<br>
+          Hold Up/Down + Attack/Special for directional variants! KO at 175% damage!</p>
         </div>
 
         <div id="end-screen" class="overlay hidden">
