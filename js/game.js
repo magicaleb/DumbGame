@@ -154,6 +154,14 @@ class Player{
     this.jumpCount = 0; // for double jump
     this.hitstun = 0;
     this.invulnerable = 0;
+    
+    // New enhanced combat system
+    this.specialType = id===1 ? 'fireball' : 'dash';
+    this.stats = {speed: 1.0, power: 1.0, defense: 1.0, agility: 1.0};
+    this.ultimate = 0; // 0-100 charge
+    this.ultimateCooldown = 0;
+    this.specialCooldown = 0; // Add missing property
+    this.specialEffects = {}; // for temporary effects like shields, berserker mode
   }
   spawn(x,y){ this.x=x; this.y=y; this.vx=0; this.vy=0; this.damage=0; this.alive=true; this.stocks=3; this.respawnTimer=0; }
   hurt(dmg, knock){ this.damage+=dmg; SoundManager.sfxHit(); this.vx += knock.x; this.vy += knock.y; }
@@ -166,10 +174,16 @@ class Player{
     const attack = input.isDown(this.controls.attack);
     const special = input.isDown(this.controls.special);
 
-  // horizontal
-  const acc = 1400; const maxV = 420; const friction=0.85;
-    if(left){ this.vx -= acc*dt; this.facing = -1; }
-    if(right){ this.vx += acc*dt; this.facing = 1; }
+  // Apply stat modifiers and special effects
+  let speedMod = this.stats.speed;
+  let frozen = !!this.specialEffects.frozen;
+  if(this.specialEffects.berserker) speedMod *= 1.5;
+  if(frozen) speedMod *= 0.1;
+
+  // horizontal movement
+  const acc = 1400 * speedMod; const maxV = 420 * speedMod; const friction=0.85;
+    if(left && !frozen){ this.vx -= acc*dt; this.facing = -1; }
+    if(right && !frozen){ this.vx += acc*dt; this.facing = 1; }
     if(!left && !right) this.vx *= friction;
     this.vx = Math.max(-maxV, Math.min(maxV, this.vx));
 
@@ -182,10 +196,25 @@ class Player{
       else if(this.jumpCount>0){ this.vy = -650; this.jumpCount=0; SoundManager.sfxJump(); particlesJump(this.x+this.w/2,this.y+this.h); }
     }
 
-    // special: dash or projectile
-  if(special && this.attackCooldown<=0 && !this.specialCooldown){ this.attackCooldown = 0.45; this.specialCooldown = 1.2; if(this.id===1) this.doFireball(); else this.doDash(); }
+    // special ability
+    if(special && this.attackCooldown<=0 && !this.specialCooldown){ 
+      this.attackCooldown = 0.3; 
+      this.specialCooldown = 0.8; // Reduced cooldown for more fun
+      this.doSpecial(); 
+    }
+    
+    // ultimate ability (new key binding)
+    const ultimate = input.isDown(this.controls.ultimate);
+    if(ultimate && this.ultimate >= 100 && this.ultimateCooldown <= 0){
+      this.ultimateCooldown = 3.0;
+      this.doUltimate();
+    }
+    
     // attack
-    if(attack && this.attackCooldown<=0){ this.attackCooldown = 0.3; this.doAttack(other); }
+    if(attack && this.attackCooldown<=0 && this.hitstun <= 0){ 
+      this.attackCooldown = 0.25 / this.stats.speed; // Speed affects attack speed
+      this.doAttack(other); 
+    }
 
     // simple ledge grab logic: if falling near platform edge, allow grab
     if(this.vy>0 && this.canGrab){
@@ -234,12 +263,26 @@ class Player{
   // check off-screen for KO
   if(this.y > H+300){ this.loseStock(); }
 
-  if(this.attackCooldown>0) this.attackCooldown -= dt;
-  if(this.specialCooldown>0) this.specialCooldown -= dt; else this.specialCooldown = 0;
-  if(this.hitstun>0) this.hitstun -= dt;
-  if(this.invulnerable>0) this.invulnerable -= dt;
-
-    // re-enable grabbing after some frames
+    // Update timers
+    if(this.attackCooldown>0) this.attackCooldown -= dt;
+    if(this.specialCooldown>0) this.specialCooldown -= dt; else this.specialCooldown = 0;
+    if(this.ultimateCooldown>0) this.ultimateCooldown -= dt;
+    if(this.hitstun>0) this.hitstun -= dt;
+    if(this.invulnerable>0) this.invulnerable -= dt;
+    
+    // Update special effects
+    Object.keys(this.specialEffects).forEach(effect => {
+      if(this.specialEffects[effect] > 0) {
+        this.specialEffects[effect] -= dt;
+        if(this.specialEffects[effect] <= 0) delete this.specialEffects[effect];
+      }
+    });
+    
+    // Ultimate charging - charge from dealing/taking damage and combat activity
+    if(this.ultimate < 100) {
+      this.ultimate += dt * 8; // Passive charge
+      this.ultimate = Math.min(100, this.ultimate);
+    }    // re-enable grabbing after some frames
     if(!this.canGrab){ this.canGrab = true; }
 
     // animation timer
@@ -247,29 +290,163 @@ class Player{
   }
 
   doAttack(other){
-    // simple forward hitbox
-    const range = 50 + Math.min(200, this.damage*0.5);
+    // Enhanced attack with stat scaling
+    const range = (50 + Math.min(200, this.damage*0.5)) * this.stats.power;
     const hx = this.facing===1 ? this.x+this.w : this.x-range;
     const hy = this.y + 20; const hw = range; const hh = 30;
     SoundManager.sfxAttack();
-    // draw hit effect (transient)
-    effects.push({type:'hit',x:hx,y:hy,t:0.12});
+    
+    // Check for special dash attack
+    const isDashAttack = !!this.specialEffects.dashAttack;
+    
+    // draw hit effect
+    effects.push({type:'hit',x:hx,y:hy,t:0.15,size:isDashAttack?2:1});
+    
     // hit detection
     if(rectsOverlap({x:hx,y:hy,w:hw,h:hh},{x:other.x,y:other.y,w:other.w,h:other.h})){ 
-      const base=6; const dmg = base; const knockFactor = 10 + other.damage*0.14;
-      const kx = this.facing*knockFactor*20*(1 + other.damage*0.01);
-      const ky = -380 * (1 + other.damage*0.015);
-      if(other.invulnerable<=0){ other.hurt(dmg, {x:kx, y:ky}); SoundManager.sfxRandomPunch(); other.hitstun = 0.18; particlesHit(other.x+other.w/2, other.y+other.h/2); screenShake(6); other.invulnerable = 0.08; }
+      // Check for counter
+      if(other.specialEffects.counter) {
+        // Counter attack!
+        other.specialEffects.counter = 0;
+        this.hurt(8, {x: -this.facing*400, y: -300});
+        SoundManager.beep(800, 0.1, 0.08);
+        return;
+      }
+      
+      // Check for shield
+      if(other.specialEffects.shield) {
+        other.specialEffects.shield -= 1.0;
+        SoundManager.beep(900, 0.05, 0.04);
+        screenShake(3);
+        return;
+      }
+      
+      const baseDmg = isDashAttack ? 10 : 8;
+      const dmg = baseDmg * this.stats.power * (this.specialEffects.berserker ? 1.4 : 1);
+      const knockFactor = (12 + other.damage*0.12) * this.stats.power;
+      const defenseReduction = 1 / other.stats.defense;
+      
+      const kx = this.facing*knockFactor*25*defenseReduction*(1 + other.damage*0.008);
+      const ky = -420*defenseReduction*(1 + other.damage*0.012);
+      
+      if(other.invulnerable<=0){ 
+        other.hurt(dmg*defenseReduction, {x:kx, y:ky}); 
+        SoundManager.sfxRandomPunch(); 
+        other.hitstun = 0.2 / other.stats.speed; 
+        particlesHit(other.x+other.w/2, other.y+other.h/2); 
+        screenShake(isDashAttack ? 10 : 7); 
+        other.invulnerable = 0.1;
+        
+        // Charge ultimate from successful hits
+        this.ultimate = Math.min(100, this.ultimate + (isDashAttack ? 15 : 8));
+      }
     }
   }
 
-  doFireball(){
-    // spawn projectile
-    projectiles.push(new Projectile(this.x+this.w/2, this.y+30, this.facing*600, -40, this.id));
-    SoundManager.sfxPower();
+  doSpecial(){
+    const specials = {
+      // Player 1 specials
+      fireball: () => {
+        const speed = 500 * this.stats.power;
+        projectiles.push(new Projectile(this.x+this.w/2, this.y+30, this.facing*speed, -20, this.id, 'fireball'));
+        SoundManager.sfxPower();
+      },
+      lightning: () => {
+        // Instant hit across screen
+        const target = this.id === 1 ? p2 : p1;
+        if(Math.abs(target.x - this.x) < W/2) {
+          target.hurt(12 * this.stats.power, {x: this.facing*300, y: -200});
+          effects.push({type:'lightning', x: this.x, y: this.y, t: 0.3});
+          SoundManager.beep(1200, 0.1, 0.08);
+        }
+      },
+      shield: () => {
+        this.specialEffects.shield = 3.0; // 3 second shield
+        SoundManager.beep(600, 0.2, 0.06);
+      },
+      teleport: () => {
+        const target = this.id === 1 ? p2 : p1;
+        const behindX = target.x + (target.facing * -60);
+        this.x = Math.max(0, Math.min(W-this.w, behindX));
+        this.y = target.y;
+        particlesJump(this.x+this.w/2, this.y+this.h);
+        SoundManager.beep(800, 0.15, 0.06);
+      },
+      multi: () => {
+        // 3-hit combo
+        for(let i = 0; i < 3; i++){
+          setTimeout(() => {
+            const target = this.id === 1 ? p2 : p1;
+            if(Math.abs(target.x - this.x) < 100 && Math.abs(target.y - this.y) < 80){
+              target.hurt(4 * this.stats.power, {x: this.facing*150*(i+1), y: -100*(i+1)});
+              particlesHit(target.x+target.w/2, target.y+target.h/2);
+              SoundManager.sfxRandomPunch();
+            }
+          }, i * 200);
+        }
+      },
+      
+      // Player 2 specials  
+      dash: () => {
+        this.vx += this.facing * 800 * this.stats.speed;
+        this.specialEffects.dashAttack = 0.5; // damage on contact for 0.5s
+        SoundManager.sfxAttack();
+      },
+      slam: () => {
+        this.vy = -300;
+        this.specialEffects.slamming = true;
+        SoundManager.beep(300, 0.2, 0.08);
+      },
+      counter: () => {
+        this.specialEffects.counter = 2.0; // counter window
+        SoundManager.beep(700, 0.1, 0.05);
+      },
+      freeze: () => {
+        const target = this.id === 1 ? p2 : p1;
+        target.specialEffects.frozen = 2.0;
+        SoundManager.beep(400, 0.3, 0.06);
+      },
+      berserker: () => {
+        this.specialEffects.berserker = 5.0; // 5 seconds of enhanced stats
+        SoundManager.beep(200, 0.4, 0.08);
+      }
+    };
+    
+    if(specials[this.specialType]) {
+      specials[this.specialType].call(this);
+    }
   }
-  doDash(){
-    this.vx += this.facing*900; SoundManager.sfxAttack();
+  
+  doUltimate(){
+    const ultimates = {
+      // Devastating screen-clearing attacks
+      fireball: () => {
+        for(let i = 0; i < 5; i++){
+          setTimeout(() => {
+            const angle = (i - 2) * 0.3;
+            const vx = Math.cos(angle) * 700 * this.facing;
+            const vy = Math.sin(angle) * 700;
+            projectiles.push(new Projectile(this.x+this.w/2, this.y+30, vx, vy, this.id, 'ultimate'));
+          }, i * 100);
+        }
+        SoundManager.beep(150, 0.8, 0.12);
+        screenShake(15);
+      },
+      dash: () => {
+        // Super dash with invincibility
+        this.vx = this.facing * 1200;
+        this.invulnerable = 1.0;
+        this.specialEffects.ultimateDash = 1.0;
+        SoundManager.beep(100, 0.6, 0.1);
+        screenShake(12);
+      }
+    };
+    
+    const baseUlt = this.id === 1 ? 'fireball' : 'dash';
+    if(ultimates[baseUlt]) {
+      ultimates[baseUlt].call(this);
+      this.ultimate = 0; // reset charge
+    }
   }
 
   loseStock(){ this.stocks -= 1; SoundManager.sfxKO(); this.alive=false; if(this.stocks>0){ this.respawnTimer = 2.0; } }
@@ -291,13 +468,69 @@ class Player{
 }
 
 class Projectile{
-  constructor(x,y,vx,vy, owner){ this.x=x; this.y=y; this.vx=vx; this.vy=vy; this.owner=owner; this.w=18; this.h=18; this.life=2.5; }
-  update(dt,players){ this.vy += 1600*dt; this.x += this.vx*dt; this.y += this.vy*dt; this.life -= dt; 
-    // bounds
-    if(this.y > H) this.life=0;
-    for(const p of players){ if(p.id !== this.owner && p.alive && rectsOverlap({x:this.x,y:this.y,w:this.w,h:this.h},{x:p.x,y:p.y,w:p.w,h:p.h})){ p.hurt(8,{x:Math.sign(this.vx)*260, y:-260}); this.life=0; SoundManager.sfxHit(); }}
+  constructor(x,y,vx,vy, owner, type='fireball'){ 
+    this.x=x; this.y=y; this.vx=vx; this.vy=vy; this.owner=owner; this.type=type; this.life=2.5;
+    
+    // Type-specific properties
+    if(type === 'fireball') {
+      this.w=18; this.h=18; this.damage=8; this.knockback=260; this.color='#ff5555';
+    } else if(type === 'lightning') {
+      this.w=12; this.h=40; this.damage=10; this.knockback=200; this.color='#ffff55';
+      this.life = 0.3; this.vy = 0; // Lightning doesn't fall
+    } else if(type === 'ultimate') {
+      this.w=40; this.h=40; this.damage=25; this.knockback=500; this.color='#ff00ff';
+      this.life = 1.8;
+    }
   }
-  draw(){ ctx.fillStyle='#ff5555'; ctx.fillRect(this.x,this.y,this.w,this.h); }
+  
+  update(dt,players){ 
+    if(this.type !== 'lightning') this.vy += 1600*dt; 
+    this.x += this.vx*dt; 
+    this.y += this.vy*dt; 
+    this.life -= dt; 
+    
+    // bounds
+    if(this.y > H || this.x < -50 || this.x > W+50) this.life=0;
+    
+    // Hit detection
+    for(const p of players){ 
+      if(p.id !== this.owner && p.alive && p.invulnerable <= 0 && rectsOverlap({x:this.x,y:this.y,w:this.w,h:this.h},{x:p.x,y:p.y,w:p.w,h:p.h})){
+        // Check for shields
+        if(p.specialEffects.shield && this.type !== 'ultimate') {
+          p.specialEffects.shield -= 1.0;
+          SoundManager.beep(900, 0.05, 0.04);
+          this.life = 0;
+          return;
+        }
+        
+        const knockX = Math.sign(this.vx) * this.knockback;
+        const knockY = this.type === 'ultimate' ? -400 : -260;
+        p.hurt(this.damage, {x:knockX, y:knockY}); 
+        this.life=0; 
+        SoundManager.sfxHit(); 
+        particlesHit(p.x+p.w/2, p.y+p.h/2);
+        screenShake(this.type === 'ultimate' ? 12 : 6);
+        p.invulnerable = this.type === 'ultimate' ? 0.3 : 0.1;
+      }
+    }
+  }
+  
+  draw(){ 
+    ctx.fillStyle = this.color; 
+    if(this.type === 'lightning') {
+      // Draw lightning bolt effect
+      ctx.fillRect(this.x-2, this.y, 4, this.h);
+      ctx.fillRect(this.x-6, this.y+10, 12, 4);
+      ctx.fillRect(this.x-4, this.y+20, 8, 4);
+    } else {
+      ctx.fillRect(this.x,this.y,this.w,this.h); 
+      if(this.type === 'ultimate') {
+        // Glowing effect for ultimates
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillRect(this.x+5,this.y+5,this.w-10,this.h-10);
+      }
+    }
+  }
 }
 
 function rectsOverlap(a,b){ return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y; }
@@ -309,8 +542,8 @@ const projectiles = [];
 const particles = [];
 let shake = {time:0,magnitude:0};
 
-const p1 = new Player(1, stage.spawnPoints[0].x, stage.spawnPoints[0].y, {left:'KeyA',right:'KeyD',up:'KeyW',attack:'KeyF',special:'KeyG'});
-const p2 = new Player(2, stage.spawnPoints[1].x, stage.spawnPoints[1].y, {left:'ArrowLeft',right:'ArrowRight',up:'ArrowUp',attack:'KeyK',special:'KeyL'});
+const p1 = new Player(1, stage.spawnPoints[0].x, stage.spawnPoints[0].y, {left:'KeyA',right:'KeyD',up:'KeyW',attack:'KeyF',special:'KeyG',ultimate:'KeyH'});
+const p2 = new Player(2, stage.spawnPoints[1].x, stage.spawnPoints[1].y, {left:'ArrowLeft',right:'ArrowRight',up:'ArrowUp',attack:'KeyK',special:'KeyL',ultimate:'Semicolon'});
 let cpuEnabled = false; let cpuDifficulty = 'med';
 
 // basic CPU controller for p2 when enabled
@@ -330,7 +563,12 @@ function updateCPU(dt){
     if(ai.attackCooldown<=0){ ai.attackCooldown = 0.3; ai.doAttack(p1); }
   }
   // special occasionally
-  if(Math.abs(dx) > 200 && Math.random() < 0.02 && ai.specialCooldown<=0){ ai.specialCooldown = 1.2; ai.doFireball(); }
+  if(Math.abs(dx) > 200 && Math.random() < 0.02 && ai.specialCooldown<=0){ ai.specialCooldown = 1.2; ai.doSpecial(); }
+  
+  // ultimate if charged and close
+  if(ai.ultimate >= 100 && Math.abs(dx) < 120 && Math.random() < 0.08 && ai.ultimateCooldown <= 0){
+    ai.ultimateCooldown = 3.0; ai.doUltimate();
+  }
 }
 
 let last = performance.now();
@@ -373,7 +611,15 @@ function draw(){
 }
 
 function showStart(){ startScreen.classList.remove('hidden'); endScreen.classList.add('hidden'); }
-function startMatch(){ startScreen.classList.add('hidden'); endScreen.classList.add('hidden'); running=true; last=performance.now(); SoundManager.init(); requestAnimationFrame(update); }
+function startMatch(){ 
+  applyCharacterCustomization();
+  startScreen.classList.add('hidden'); 
+  endScreen.classList.add('hidden'); 
+  running=true; 
+  last=performance.now(); 
+  SoundManager.init(); 
+  requestAnimationFrame(update); 
+}
 function showEnd(){ endScreen.classList.remove('hidden'); startScreen.classList.add('hidden'); endTitle.textContent = p1.stocks>p2.stocks ? 'Player 1 Wins!' : 'Player 2 Wins!'; }
 
 btnStart.addEventListener('click', ()=>{
@@ -397,18 +643,82 @@ btnStart.addEventListener('click', ()=>{
 });
 btnRestart.addEventListener('click', ()=>{ p1.stocks=3; p2.stocks=3; p1.damage=0; p2.damage=0; p1.alive=true; p2.alive=true; SoundManager.sfxUI(); startMatch(); });
 
+// Function to apply character customization
+function applyCharacterCustomization() {
+  // Apply Player 1 settings
+  const p1SpecialEl = document.querySelector('input[name="p1-special"]:checked');
+  if(p1SpecialEl) p1.specialType = p1SpecialEl.value;
+  
+  p1.stats.speed = parseFloat(document.getElementById('p1-speed').value);
+  p1.stats.power = parseFloat(document.getElementById('p1-power').value);
+  p1.stats.defense = parseFloat(document.getElementById('p1-defense').value);
+  
+  // Apply Player 2 settings
+  const p2SpecialEl = document.querySelector('input[name="p2-special"]:checked');
+  if(p2SpecialEl) p2.specialType = p2SpecialEl.value;
+  
+  p2.stats.speed = parseFloat(document.getElementById('p2-speed').value);
+  p2.stats.power = parseFloat(document.getElementById('p2-power').value);
+  p2.stats.defense = parseFloat(document.getElementById('p2-defense').value);
+  
+  console.log('Character customization applied:', {
+    p1: {special: p1.specialType, stats: p1.stats},
+    p2: {special: p2.specialType, stats: p2.stats}
+  });
+}
+
 // visual tweak: draw HUD stocks as small squares near players
 function drawHUD(){
   // subtle background for HUD
   ctx.save(); ctx.globalAlpha = 0.9;
+  
   // draw small stock boxes
   for(let i=0;i<p1.stocks;i++){ ctx.fillStyle = p1.color; ctx.fillRect(16+i*14,52,12,12); }
   for(let i=0;i<p2.stocks;i++){ ctx.fillStyle = p2.color; ctx.fillRect(W-120+i*14,52,12,12); }
+  
   // draw special cooldown bars
-  if(p1.specialCooldown>0){ const w = Math.max(0, Math.min(80, (p1.specialCooldown/1.2)*80)); ctx.fillStyle='#222'; ctx.fillRect(16,70,80,8); ctx.fillStyle='#ffcc33'; ctx.fillRect(16,70,w,8); }
-  else { ctx.fillStyle='#223'; ctx.fillRect(16,70,80,8); }
-  if(p2.specialCooldown>0){ const w2 = Math.max(0, Math.min(80, (p2.specialCooldown/1.2)*80)); ctx.fillStyle='#222'; ctx.fillRect(W-120,70,80,8); ctx.fillStyle='#33ccff'; ctx.fillRect(W-120,70,w2,8); }
-  else { ctx.fillStyle='#223'; ctx.fillRect(W-120,70,80,8); }
+  if(p1.specialCooldown>0){ 
+    const w = Math.max(0, Math.min(80, (p1.specialCooldown/1.2)*80)); 
+    ctx.fillStyle='#222'; ctx.fillRect(16,70,80,8); 
+    ctx.fillStyle='#ffcc33'; ctx.fillRect(16,70,w,8); 
+  } else { 
+    ctx.fillStyle='#223'; ctx.fillRect(16,70,80,8); 
+  }
+  
+  if(p2.specialCooldown>0){ 
+    const w2 = Math.max(0, Math.min(80, (p2.specialCooldown/1.2)*80)); 
+    ctx.fillStyle='#222'; ctx.fillRect(W-120,70,80,8); 
+    ctx.fillStyle='#33ccff'; ctx.fillRect(W-120,70,w2,8); 
+  } else { 
+    ctx.fillStyle='#223'; ctx.fillRect(W-120,70,80,8); 
+  }
+  
+  // Draw ultimate meters
+  const ultBarWidth = 100;
+  const ultBarHeight = 12;
+  
+  // Player 1 Ultimate Bar
+  const ult1Width = (p1.ultimate / 100) * ultBarWidth;
+  ctx.fillStyle = '#333'; ctx.fillRect(16, 82, ultBarWidth, ultBarHeight); // Background
+  ctx.fillStyle = p1.ultimate >= 100 ? '#ff00ff' : '#ffcc33'; 
+  ctx.fillRect(16, 82, ult1Width, ultBarHeight); // Charge
+  if(p1.ultimate >= 100) {
+    // Pulsing effect when ready
+    ctx.fillStyle = `rgba(255,255,255,${0.3 + 0.3 * Math.sin(performance.now() * 0.01)})`;
+    ctx.fillRect(16, 82, ultBarWidth, ultBarHeight);
+  }
+  
+  // Player 2 Ultimate Bar  
+  const ult2Width = (p2.ultimate / 100) * ultBarWidth;
+  ctx.fillStyle = '#333'; ctx.fillRect(W-120, 82, ultBarWidth, ultBarHeight); // Background
+  ctx.fillStyle = p2.ultimate >= 100 ? '#ff00ff' : '#33ccff'; 
+  ctx.fillRect(W-120, 82, ult2Width, ultBarHeight); // Charge
+  if(p2.ultimate >= 100) {
+    // Pulsing effect when ready
+    ctx.fillStyle = `rgba(255,255,255,${0.3 + 0.3 * Math.sin(performance.now() * 0.01)})`;
+    ctx.fillRect(W-120, 82, ultBarWidth, ultBarHeight);
+  }
+  
   ctx.restore();
 }
 

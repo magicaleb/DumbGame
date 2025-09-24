@@ -23,6 +23,17 @@ button{padding:12px 24px;background:var(--accent);border:none;color:#000;font-we
 #audio-controls label{font-size:13px;color:#ddd}
 #audio-controls input[type=range]{vertical-align:middle}
 
+#character-select{display:flex;gap:40px;margin:20px 0;justify-content:center}
+.player-setup{background:rgba(0,0,0,0.3);padding:20px;border-radius:8px;min-width:300px}
+.player-setup h3{margin-top:0;color:var(--accent)}
+.special-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.special-grid label{display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer}
+.special-grid input[type=radio]{margin:0}
+.stat-sliders{margin-top:16px}
+.stat-sliders label{display:block;margin:6px 0;font-size:12px;color:#ccc}
+.ultimate-bar{width:80px;height:8px;background:#333;border:1px solid #555;margin-top:4px;position:relative}
+.ultimate-bar > div{height:100%;background:linear-gradient(90deg,#ff6b35,#f7931e);width:0%;transition:width 0.3s}
+
 #options-panel{display:flex;gap:12px;align-items:center;margin-bottom:12px}
 #options-panel label{color:#ddd;font-size:14px}
 #options-panel select, #options-panel input[type=checkbox]{margin-left:6px}
