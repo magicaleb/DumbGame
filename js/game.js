@@ -27,32 +27,61 @@ class SoundManager{
   static startMusic(){
     ensureAudioGraph();
     if(this._music) return;
-    // richer chiptune: two oscillators + periodic arpeggio + percussion
-    const lead = audioCtx.createOscillator(); const leadGain = audioCtx.createGain();
-    lead.type = 'square'; lead.frequency.value = 220; leadGain.gain.value = 0.035;
-    const sub = audioCtx.createOscillator(); const subGain = audioCtx.createGain();
-    sub.type = 'sawtooth'; sub.frequency.value = 110; subGain.gain.value = 0.01;
-    lead.connect(leadGain); leadGain.connect(SoundManager.master);
-    sub.connect(subGain); subGain.connect(SoundManager.master);
-    lead.start(); sub.start();
-    this._music = {lead,leadGain,sub,subGain,interval:null,step:0};
-    // arpeggio
-    this._music.interval = setInterval(()=>{
-      if(!this._music) return;
-      const seq = [0,3,7,10]; // semitone offsets
-      const base = 220;
-      const note = seq[this._music.step % seq.length];
-      const freq = base * Math.pow(2, note/12);
-      lead.frequency.setTargetAtTime(freq, audioCtx.currentTime, 0.02);
-      // small percussive pluck using gain envelope on sub
-      subGain.gain.cancelScheduledValues(audioCtx.currentTime);
-      subGain.gain.setValueAtTime(0.01, audioCtx.currentTime);
-      subGain.gain.linearRampToValueAtTime(0.18, audioCtx.currentTime + 0.03);
-      subGain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.18);
-      this._music.step++;
-    }, 300);
+    // If we already generated a music buffer, use it. Otherwise create one.
+    const playBuffer = (buf)=>{
+      const src = audioCtx.createBufferSource(); src.buffer = buf; src.loop = true; src.loopStart = 0; src.loopEnd = buf.duration; src.connect(SoundManager.master);
+      src.start();
+      this._music = {source: src, buffer: buf};
+    };
+    if(this.musicBuffer){ playBuffer(this.musicBuffer); }
+    else {
+      // generate a 30s chiptune buffer (synchronous but reasonably fast)
+      const buf = SoundManager._generateChiptuneBuffer(30);
+      this.musicBuffer = buf;
+      playBuffer(buf);
+    }
   }
-  static stopMusic(){ if(this._music){ try{ this._music.osc.stop(); }catch(e){} this._music=null; } }
+  static stopMusic(){ if(this._music){ try{ if(this._music.source) this._music.source.stop(); }catch(e){} if(this._music.interval) clearInterval(this._music.interval); this._music=null; } }
+
+  // Procedural chiptune generator: returns an AudioBuffer of given seconds
+  static _generateChiptuneBuffer(seconds=30, sampleRate=44100){
+    ensureAudio();
+    const sr = sampleRate; const len = Math.floor(seconds * sr);
+    const channels = 2;
+    const buf = audioCtx.createBuffer(channels, len, sr);
+    // simple instruments: square melody, triangle bass, noise percussion
+    const melodySeq = [0,3,7,10,7,3,0,-2]; // a phrase
+    const bpm = 120; const beatSec = 60/bpm; const ticks = Math.floor(seconds / (beatSec/2));
+    // helper waveform generators
+    function square(sampleRate, freq, t){ return Math.sign(Math.sin(2*Math.PI*freq*t)); }
+    function triangle(sampleRate, freq, t){ return 2*Math.abs(2*((t*freq)%1)-1)-1; }
+    function noise(){ return Math.random()*2-1; }
+
+    const ch0 = buf.getChannelData(0); const ch1 = buf.getChannelData(1);
+    for(let i=0;i<len;i++){
+      const t = i/sr;
+      // melody: change every 0.5s
+      const step = Math.floor(t/0.5) % melodySeq.length;
+      const note = melodySeq[step];
+      const base = 220; const freq = base * Math.pow(2, note/12);
+      const mel = 0.25 * square(sr,freq,t) * (0.6 + 0.4*Math.sin(0.5*t));
+      // bass on quarter notes
+      const bassStep = Math.floor(t/1.0)%4; const bassNote = [-12,-12,-5,-7][bassStep];
+      const bassFreq = 110 * Math.pow(2, bassNote/12);
+      const b = 0.12 * triangle(sr,bassFreq,t);
+      // percussion: simple click on every beat
+      const isBeat = (Math.floor(t/beatSec) !== Math.floor((t-1/sr)/beatSec));
+      const perc = ((Math.floor(t/beatSec*2) % 2)===0) ? (0.08 * (Math.random()*2-1) * Math.exp(-6*(t%beatSec))) : 0;
+      // small arpeggio overlay
+      const arp = 0.06 * square(sr, freq*2, t) * (0.4 + 0.6*Math.cos(1.5*t));
+      const s = mel + b + perc + arp;
+      // soft stereo panning
+      ch0[i] = Math.tanh(s * 1.0) * (0.95);
+      ch1[i] = Math.tanh(s * 1.0) * (0.95);
+    }
+    return buf;
+  }
+  static _cleanupMusic(){ if(this._music){ try{ if(this._music.lead) this._music.lead.stop(); if(this._music.sub) this._music.sub.stop(); }catch(e){} if(this._music.interval) clearInterval(this._music.interval); this._music=null; } }
   static beep(freq=440,dur=0.08, gain=0.08){
     ensureAudioGraph();
     const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
@@ -75,8 +104,8 @@ const musicToggle = document.getElementById('music-toggle');
 const volumeSlider = document.getElementById('volume');
 if(musicToggle && volumeSlider){
   musicToggle.addEventListener('change', ()=>{
-    if(!SoundManager._music){ if(musicToggle.checked) SoundManager.startMusic(); return; }
-    SoundManager._music.gain.gain.value = musicToggle.checked ? 1.0 : 0.0;
+    if(musicToggle.checked){ SoundManager.startMusic(); }
+    else { SoundManager.stopMusic(); }
   });
   volumeSlider.addEventListener('input', ()=>{
     ensureAudioGraph(); SoundManager.master.gain.value = parseFloat(volumeSlider.value);
@@ -282,6 +311,27 @@ let shake = {time:0,magnitude:0};
 
 const p1 = new Player(1, stage.spawnPoints[0].x, stage.spawnPoints[0].y, {left:'KeyA',right:'KeyD',up:'KeyW',attack:'KeyF',special:'KeyG'});
 const p2 = new Player(2, stage.spawnPoints[1].x, stage.spawnPoints[1].y, {left:'ArrowLeft',right:'ArrowRight',up:'ArrowUp',attack:'KeyK',special:'KeyL'});
+let cpuEnabled = false; let cpuDifficulty = 'med';
+
+// basic CPU controller for p2 when enabled
+function updateCPU(dt){
+  if(!cpuEnabled) return;
+  const ai = p2; const target = p1;
+  if(!ai.alive) return;
+  // movement: approach target
+  const dx = (target.x - ai.x);
+  if(Math.abs(dx) > 60){ if(dx<0) ai.vx -= 1200*dt; else ai.vx += 1200*dt; }
+  // jump if player is above and close
+  if(target.y + 20 < ai.y && Math.abs(dx) < 160 && Math.random() < (cpuDifficulty==='hard'?0.1:0.04)){
+    if(ai.onGround) { ai.vy = -720; ai.onGround=false; SoundManager.sfxJump(); }
+  }
+  // attack if close
+  if(Math.abs(dx) < 80 && Math.random() < (cpuDifficulty==='hard'?0.12:0.06)){
+    if(ai.attackCooldown<=0){ ai.attackCooldown = 0.3; ai.doAttack(p1); }
+  }
+  // special occasionally
+  if(Math.abs(dx) > 200 && Math.random() < 0.02 && ai.specialCooldown<=0){ ai.specialCooldown = 1.2; ai.doFireball(); }
+}
 
 let last = performance.now();
 let running = false;
@@ -290,6 +340,7 @@ function update(){
   const now = performance.now(); const dt = Math.min(1/30,(now-last)/1000); last = now;
   if(!running) return;
   p1.update(dt,stage,p2); p2.update(dt,stage,p1);
+  updateCPU(dt);
   for(const pr of projectiles) pr.update(dt,[p1,p2]);
   for(let i=projectiles.length-1;i>=0;i--) if(projectiles[i].life<=0) projectiles.splice(i,1);
   for(let i=effects.length-1;i>=0;i--){ effects[i].t -= dt; if(effects[i].t<=0) effects.splice(i,1); }
@@ -325,7 +376,25 @@ function showStart(){ startScreen.classList.remove('hidden'); endScreen.classLis
 function startMatch(){ startScreen.classList.add('hidden'); endScreen.classList.add('hidden'); running=true; last=performance.now(); SoundManager.init(); requestAnimationFrame(update); }
 function showEnd(){ endScreen.classList.remove('hidden'); startScreen.classList.add('hidden'); endTitle.textContent = p1.stocks>p2.stocks ? 'Player 1 Wins!' : 'Player 2 Wins!'; }
 
-btnStart.addEventListener('click', ()=>{ p1.spawn(stage.spawnPoints[0].x,stage.spawnPoints[0].y); p2.spawn(stage.spawnPoints[1].x,stage.spawnPoints[1].y); SoundManager.startMusic(); SoundManager.sfxUI(); startMatch(); });
+btnStart.addEventListener('click', ()=>{
+  // read options
+  const stocks = parseInt(document.getElementById('opt-stocks').value || '3',10);
+  const stageOpt = document.getElementById('opt-stage').value || 'default';
+  cpuEnabled = !!document.getElementById('opt-cpu').checked;
+  cpuDifficulty = document.getElementById('opt-diff').value || 'med';
+  // apply stocks
+  p1.stocks = stocks; p2.stocks = stocks;
+  // apply stage presets
+  if(stageOpt==='small'){
+    stage.platforms = [ {x:W/2-110,y:stage.groundY-120,w:220,h:16} ];
+  } else if(stageOpt==='wide'){
+    stage.platforms = [ {x:W/2-220,y:stage.groundY-200,w:440,h:16}, {x:220,y:stage.groundY-260,w:160,h:12} ];
+  } else {
+    stage.platforms = [ {x:W/2-160,y:stage.groundY-160,w:320,h:16}, {x:220,y:stage.groundY-260,w:160,h:12}, {x:W-380,y:stage.groundY-260,w:160,h:12} ];
+  }
+  p1.spawn(stage.spawnPoints[0].x,stage.spawnPoints[0].y); p2.spawn(stage.spawnPoints[1].x,stage.spawnPoints[1].y);
+  SoundManager.startMusic(); SoundManager.sfxUI(); startMatch();
+});
 btnRestart.addEventListener('click', ()=>{ p1.stocks=3; p2.stocks=3; p1.damage=0; p2.damage=0; p1.alive=true; p2.alive=true; SoundManager.sfxUI(); startMatch(); });
 
 // visual tweak: draw HUD stocks as small squares near players
@@ -350,5 +419,6 @@ function screenShake(mag){ shake.time = Math.max(shake.time,0.12); shake.magnitu
 // initial
 showStart();
 // stop music when leaving
-window.addEventListener('blur', ()=>{ if(SoundManager._music){ SoundManager._music.gain.gain.value = 0; } });
+window.addEventListener('blur', ()=>{ if(SoundManager.master) SoundManager.master.gain.value = 0.06; });
+window.addEventListener('focus', ()=>{ if(SoundManager.master) SoundManager.master.gain.value = parseFloat(document.getElementById('volume')?.value || 0.8); });
 

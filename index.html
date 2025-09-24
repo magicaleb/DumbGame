@@ -13,6 +13,12 @@
         <div id="start-screen" class="overlay">
           <h1>DumbGame</h1>
           <p>2-player local fighter — WASD+F/G vs Arrows+K/L</p>
+          <div id="options-panel">
+            <label>Stocks: <select id="opt-stocks"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
+            <label>Stage: <select id="opt-stage"><option value="default">Default</option><option value="small">Small</option><option value="wide">Wide</option></select></label>
+            <label>CPU Opponent: <input type="checkbox" id="opt-cpu"></label>
+            <label>AI Difficulty: <select id="opt-diff"><option value="easy">Easy</option><option value="med" selected>Normal</option><option value="hard">Hard</option></select></label>
+          </div>
           <button id="btn-start">Start Match</button>
           <p class="hint">Move: A/D or ←/→ • Jump: W or ↑ • Attack: F or K • Special: G or L</p>
         </div>
