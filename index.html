@@ -27,13 +27,7 @@
                 <label><input type="radio" name="p1-special" value="lightning"> ⚡ Lightning</label>
               </div>
               <div class="ability-descriptions">
-                <p><strong>🔥 Fireball:</strong> Projectile attack. Up/Down changes trajectory.</p>
-                <p><strong>� Grapple:</strong> Hook ability. Up = grapple to platform, Neutral = pull enemy, Down = slam.</p>
-                <p><strong>⏰ Time Warp:</strong> Time manipulation. Up = slow enemy, Neutral = speed boost, Down = rewind position.</p>
-                <p><strong>🌀 Teleport:</strong> Instant movement. Up/Down teleports vertically.</p>
-                <p><strong>🚀 Dash:</strong> Speed burst. Up = air dash, Down = ground slam.</p>
-                <p><strong>�️ Shield:</strong> Temporary shield blocks attacks.</p>
-                <p><strong>⚡ Lightning:</strong> Instant lightning strike.</p>
+                <!-- Ability descriptions moved to How to Play overlay -->
               </div>
               <div class="ultimate-grid">
                 <label><input type="radio" name="p1-ultimate" value="meteor" checked> ☄️ Meteor Storm</label>
@@ -60,11 +54,7 @@
                 <label><input type="radio" name="p2-special" value="dash" checked> 🚀 Dash</label>
               </div>
               <div class="ability-descriptions">
-                <p><strong>🔥 Fireball:</strong> Projectile attack. Up/Down changes trajectory.</p>
-                <p><strong>🪝 Grapple:</strong> Hook ability. Up = grapple to platform, Neutral = pull enemy, Down = slam.</p>
-                <p><strong>⏰ Time Warp:</strong> Time manipulation. Up = slow enemy, Neutral = speed boost, Down = rewind position.</p>
-                <p><strong>🌀 Teleport:</strong> Instant movement. Up/Down teleports vertically.</p>
-                <p><strong>🚀 Dash:</strong> Speed burst. Up = air dash, Down = ground slam.</p>
+                <!-- Ability descriptions moved to How to Play overlay -->
 =======
                 <label><input type="radio" name="p2-special" value="fireball"> 🔥 Fireball</label>
                 <label><input type="radio" name="p2-special" value="dash" checked> 🚀 Dash</label>
@@ -99,7 +89,45 @@
           <p class="hint">Move: A/D or ←/→ • Jump: W or ↑ (double jump!) • Attack: F or K • Special: G or L • Ultimate: H or ;<br>
           Hold Up/Down + Attack/Special for directional variants! Hold S/↓ on platform to drop through! KO at 175% damage!</p>
 =======
-          <p class="hint">Move: A/D or ←/→ • Jump: W or ↑ (double-tap for double jump) • Attack: F or K (+ direction for up/down attacks) • Special: G or L • Ultimate: H or ; • Pause: ESC</p>
+          <!-- Instructions moved to How to Play overlay -->
+          <button id="btn-howtoplay" style="margin-top:12px;">How to Play</button>
+        <!-- How to Play Overlay -->
+        <div id="howtoplay-overlay" class="overlay hidden">
+          <h1>How to Play</h1>
+          <div style="max-width:700px;text-align:left;background:rgba(0,0,0,0.3);padding:24px;border-radius:8px;">
+            <h2>Controls</h2>
+            <ul>
+              <li><strong>Player 1:</strong> Move: A/D, Jump: W, Attack: F, Special: G, Ultimate: H</li>
+              <li><strong>Player 2:</strong> Move: ←/→, Jump: ↑, Attack: K, Special: L, Ultimate: ;</li>
+              <li>Hold Up/Down + Attack/Special for directional variants. Hold S/↓ on platform to drop through.</li>
+              <li>Pause: ESC</li>
+            </ul>
+            <h2>Special Abilities</h2>
+            <ul>
+              <li><strong>🔥 Fireball:</strong> Projectile attack. Up/Down changes trajectory.</li>
+              <li><strong>🦝 Grapple:</strong> Hook ability. Up = grapple to platform, Neutral = pull enemy, Down = slam.</li>
+              <li><strong>⏰ Time Warp:</strong> Time manipulation. Up = slow enemy, Neutral = speed boost, Down = rewind position.</li>
+              <li><strong>🌀 Teleport:</strong> Instant movement. Up/Down teleports vertically.</li>
+              <li><strong>🚀 Dash:</strong> Speed burst. Up = air dash, Down = ground slam.</li>
+              <li><strong>🛡️ Shield:</strong> Temporary shield blocks attacks.</li>
+              <li><strong>⚡ Lightning:</strong> Instant lightning strike.</li>
+            </ul>
+            <h2>Ultimate Abilities</h2>
+            <ul>
+              <li><strong>☄️ Meteor Storm:</strong> Rains meteors from the sky, dealing massive area damage.</li>
+              <li><strong>⏰ Time Freeze:</strong> Freezes opponent, giving combo opportunity and speed boost.</li>
+              <li><strong>👥 Shadow Clone:</strong> Creates a temporary fighting clone to assist you.</li>
+              <li><strong>⚡ Lightning Blitz:</strong> Super speed dash with multiple hits and invulnerability.</li>
+              <li><strong>🌑 Gravity Well:</strong> Creates a black hole that pulls opponent in.</li>
+            </ul>
+            <h2>Other Info</h2>
+            <ul>
+              <li>KO at 175% damage or if you fall off the stage.</li>
+              <li>Customize your stats using the sliders. Total points are limited for balance.</li>
+            </ul>
+            <button id="btn-close-howtoplay" style="margin-top:18px;">Close</button>
+          </div>
+        </div>
 >>>>>>> 88cc38ca69ab73d4099b7e006589fb36a801ca15
         </div>
 
