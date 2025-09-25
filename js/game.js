@@ -157,6 +157,7 @@ class Player{
     
     // New enhanced combat system
     this.specialType = id===1 ? 'fireball' : 'dash';
+    this.ultimateType = id===1 ? 'meteor' : 'blitz'; // Default ultimates
     this.stats = {speed: 1.0, power: 1.0, defense: 1.0, agility: 1.0};
     this.ultimate = 0; // 0-100 charge
     this.ultimateCooldown = 0;
@@ -179,6 +180,11 @@ class Player{
   let frozen = !!this.specialEffects.frozen;
   if(this.specialEffects.berserker) speedMod *= 1.5;
   if(frozen) speedMod *= 0.1;
+  
+  // Handle special ultimate effects
+  if(this.specialEffects.timeBoost) {
+    speedMod *= 2.0; // Double speed during time freeze
+  }
 
   // horizontal movement
   const acc = 1400 * speedMod; const maxV = 420 * speedMod; const friction=0.85;
@@ -210,10 +216,16 @@ class Player{
       this.doUltimate();
     }
     
-    // attack
+    // attack with directional support
     if(attack && this.attackCooldown<=0 && this.hitstun <= 0){ 
       this.attackCooldown = 0.25 / this.stats.speed; // Speed affects attack speed
-      this.doAttack(other); 
+      
+      // Determine attack direction based on input
+      let attackDir = 'horizontal';
+      if(input.isDown(this.controls.up)) attackDir = 'up';
+      else if(input.isDown(this.controls.down)) attackDir = 'down';
+      
+      this.doAttack(other, attackDir); 
     }
 
     // simple ledge grab logic: if falling near platform edge, allow grab
@@ -278,6 +290,29 @@ class Player{
       }
     });
     
+    // Handle other ultimate effects that need continuous updates
+    if(this.specialEffects.lightningBlitz) {
+      // Damage anything we touch during blitz
+      if(Math.abs(this.x - other.x) < 60 && Math.abs(this.y - other.y) < 60) {
+        if(Math.random() < 0.1) { // 10% chance per frame
+          other.hurt(3, {x: this.facing*200, y: -150});
+          particlesHit(other.x+other.w/2, other.y+other.h/2);
+        }
+      }
+    }
+    
+    if(this.specialEffects.gravityWell) {
+      // Pull opponent towards gravity well
+      const dx = this.gravityWellX - other.x;
+      const dy = this.gravityWellY - other.y;
+      const dist = Math.hypot(dx, dy);
+      if(dist < 200) {
+        const force = (200 - dist) * 5;
+        other.vx += (dx / dist) * force * dt;
+        other.vy += (dy / dist) * force * dt;
+      }
+    }
+    
     // Ultimate charging - charge from dealing/taking damage and combat activity
     if(this.ultimate < 100) {
       this.ultimate += dt * 8; // Passive charge
@@ -289,18 +324,28 @@ class Player{
     this.anim.t += dt; if(this.anim.t > 0.12){ this.anim.t = 0; this.anim.frame = (this.anim.frame+1)%4; }
   }
 
-  doAttack(other){
-    // Enhanced attack with stat scaling
+  doAttack(other, direction = 'horizontal'){
+    // Enhanced attack with stat scaling and directional support
     const range = (50 + Math.min(200, this.damage*0.5)) * this.stats.power;
-    const hx = this.facing===1 ? this.x+this.w : this.x-range;
-    const hy = this.y + 20; const hw = range; const hh = 30;
+    let hx, hy, hw, hh;
+    
+    // Set hitbox based on attack direction
+    if(direction === 'up') {
+      hx = this.x + 5; hy = this.y - 50; hw = this.w - 10; hh = 60;
+    } else if(direction === 'down') {
+      hx = this.x + 5; hy = this.y + this.h - 10; hw = this.w - 10; hh = 60;
+    } else { // horizontal
+      hx = this.facing===1 ? this.x+this.w : this.x-range;
+      hy = this.y + 20; hw = range; hh = 30;
+    }
+    
     SoundManager.sfxAttack();
     
     // Check for special dash attack
     const isDashAttack = !!this.specialEffects.dashAttack;
     
     // draw hit effect
-    effects.push({type:'hit',x:hx,y:hy,t:0.15,size:isDashAttack?2:1});
+    effects.push({type:'hit',x:hx,y:hy,t:0.15,size:isDashAttack?2:1,direction:direction});
     
     // hit detection
     if(rectsOverlap({x:hx,y:hy,w:hw,h:hh},{x:other.x,y:other.y,w:other.w,h:other.h})){ 
@@ -326,8 +371,18 @@ class Player{
       const knockFactor = (12 + other.damage*0.12) * this.stats.power;
       const defenseReduction = 1 / other.stats.defense;
       
-      const kx = this.facing*knockFactor*25*defenseReduction*(1 + other.damage*0.008);
-      const ky = -420*defenseReduction*(1 + other.damage*0.012);
+      // Directional knockback
+      let kx, ky;
+      if(direction === 'up') {
+        kx = this.facing * knockFactor * 15 * defenseReduction;
+        ky = -600 * defenseReduction * (1 + other.damage*0.015); // Strong upward
+      } else if(direction === 'down') {
+        kx = this.facing * knockFactor * 10 * defenseReduction;
+        ky = 300 * defenseReduction; // Downward spike
+      } else { // horizontal
+        kx = this.facing*knockFactor*25*defenseReduction*(1 + other.damage*0.008);
+        ky = -420*defenseReduction*(1 + other.damage*0.012);
+      }
       
       if(other.invulnerable<=0){ 
         other.hurt(dmg*defenseReduction, {x:kx, y:ky}); 
@@ -345,24 +400,16 @@ class Player{
 
   doSpecial(){
     const specials = {
-      // Player 1 specials
+      // Top 5 abilities available to both players
       fireball: () => {
         const speed = 500 * this.stats.power;
         projectiles.push(new Projectile(this.x+this.w/2, this.y+30, this.facing*speed, -20, this.id, 'fireball'));
         SoundManager.sfxPower();
       },
-      lightning: () => {
-        // Instant hit across screen
-        const target = this.id === 1 ? p2 : p1;
-        if(Math.abs(target.x - this.x) < W/2) {
-          target.hurt(12 * this.stats.power, {x: this.facing*300, y: -200});
-          effects.push({type:'lightning', x: this.x, y: this.y, t: 0.3});
-          SoundManager.beep(1200, 0.1, 0.08);
-        }
-      },
-      shield: () => {
-        this.specialEffects.shield = 3.0; // 3 second shield
-        SoundManager.beep(600, 0.2, 0.06);
+      dash: () => {
+        this.vx += this.facing * 800 * this.stats.speed;
+        this.specialEffects.dashAttack = 0.5; // damage on contact for 0.5s
+        SoundManager.sfxAttack();
       },
       teleport: () => {
         const target = this.id === 1 ? p2 : p1;
@@ -372,43 +419,27 @@ class Player{
         particlesJump(this.x+this.w/2, this.y+this.h);
         SoundManager.beep(800, 0.15, 0.06);
       },
-      multi: () => {
-        // 3-hit combo
-        for(let i = 0; i < 3; i++){
-          setTimeout(() => {
-            const target = this.id === 1 ? p2 : p1;
-            if(Math.abs(target.x - this.x) < 100 && Math.abs(target.y - this.y) < 80){
-              target.hurt(4 * this.stats.power, {x: this.facing*150*(i+1), y: -100*(i+1)});
-              particlesHit(target.x+target.w/2, target.y+target.h/2);
-              SoundManager.sfxRandomPunch();
-            }
-          }, i * 200);
-        }
+      shield: () => {
+        this.specialEffects.shield = 3.0; // 3 second shield
+        SoundManager.beep(600, 0.2, 0.06);
       },
-      
-      // Player 2 specials  
-      dash: () => {
-        this.vx += this.facing * 800 * this.stats.speed;
-        this.specialEffects.dashAttack = 0.5; // damage on contact for 0.5s
-        SoundManager.sfxAttack();
-      },
-      slam: () => {
-        this.vy = -300;
-        this.specialEffects.slamming = true;
-        SoundManager.beep(300, 0.2, 0.08);
-      },
-      counter: () => {
-        this.specialEffects.counter = 2.0; // counter window
-        SoundManager.beep(700, 0.1, 0.05);
-      },
-      freeze: () => {
+      lightning: () => {
+        // Enhanced lightning - instant hit across screen with visual effects
         const target = this.id === 1 ? p2 : p1;
-        target.specialEffects.frozen = 2.0;
-        SoundManager.beep(400, 0.3, 0.06);
-      },
-      berserker: () => {
-        this.specialEffects.berserker = 5.0; // 5 seconds of enhanced stats
-        SoundManager.beep(200, 0.4, 0.08);
+        if(Math.abs(target.x - this.x) < W) {
+          target.hurt(12 * this.stats.power, {x: this.facing*300, y: -200});
+          effects.push({type:'lightning', x: this.x, y: this.y, t: 0.3});
+          // Create lightning bolt effect
+          for(let i = 0; i < 8; i++){
+            particles.push({
+              x: this.x + (target.x - this.x) * (i/8) + (Math.random()*40-20), 
+              y: this.y + (target.y - this.y) * (i/8) + (Math.random()*40-20), 
+              vx: 0, vy: 0, t: 0.2, col: '#ffff00', s: 4
+            });
+          }
+          SoundManager.beep(1200, 0.1, 0.08);
+          screenShake(8);
+        }
       }
     };
     
@@ -419,32 +450,82 @@ class Player{
   
   doUltimate(){
     const ultimates = {
-      // Devastating screen-clearing attacks
-      fireball: () => {
-        for(let i = 0; i < 5; i++){
+      // 1. Meteor Storm - Rains meteors from the sky
+      meteor: () => {
+        for(let i = 0; i < 8; i++){
           setTimeout(() => {
-            const angle = (i - 2) * 0.3;
-            const vx = Math.cos(angle) * 700 * this.facing;
-            const vy = Math.sin(angle) * 700;
-            projectiles.push(new Projectile(this.x+this.w/2, this.y+30, vx, vy, this.id, 'ultimate'));
-          }, i * 100);
+            const x = Math.random() * W;
+            const vy = 600 + Math.random() * 300;
+            projectiles.push(new Projectile(x, -50, Math.random()*200-100, vy, this.id, 'ultimate'));
+          }, i * 300);
         }
-        SoundManager.beep(150, 0.8, 0.12);
+        SoundManager.beep(120, 1.2, 0.15);
+        screenShake(20);
+      },
+      
+      // 2. Time Freeze - Freezes opponent and creates combo opportunity  
+      chronos: () => {
+        const target = this.id === 1 ? p2 : p1;
+        target.specialEffects.frozen = 4.0;
+        this.specialEffects.timeBoost = 4.0; // Enhanced speed while target frozen
+        
+        // Visual effect
+        for(let i = 0; i < 20; i++){
+          particles.push({
+            x: target.x + Math.random()*60-30, 
+            y: target.y + Math.random()*80-40, 
+            vx: 0, vy: 0, t: 2.0, col: '#00ffff', s: 3
+          });
+        }
+        SoundManager.beep(800, 0.3, 0.1);
+        screenShake(8);
+      },
+      
+      // 3. Shadow Clone - Creates temporary fighting clone
+      shadow: () => {
+        this.specialEffects.shadowClone = 6.0;
+        this.shadowCloneX = this.x + (this.facing * -80);
+        this.shadowCloneY = this.y;
+        
+        SoundManager.beep(400, 0.4, 0.1);
+        screenShake(10);
+      },
+      
+      // 4. Lightning Blitz - Super speed dash with multiple hits
+      blitz: () => {
+        this.specialEffects.lightningBlitz = 2.0;
+        this.invulnerable = 2.0;
+        this.vx = this.facing * 1500;
+        
+        // Create lightning trail
+        for(let i = 0; i < 15; i++){
+          setTimeout(() => {
+            particles.push({
+              x: this.x + Math.random()*40-20, 
+              y: this.y + Math.random()*60-30, 
+              vx: -this.vx * 0.3, vy: Math.random()*200-100, 
+              t: 0.5, col: '#ffff00', s: 2
+            });
+          }, i * 50);
+        }
+        
+        SoundManager.beep(1000, 0.8, 0.12);
         screenShake(15);
       },
-      dash: () => {
-        // Super dash with invincibility
-        this.vx = this.facing * 1200;
-        this.invulnerable = 1.0;
-        this.specialEffects.ultimateDash = 1.0;
-        SoundManager.beep(100, 0.6, 0.1);
+      
+      // 5. Gravity Well - Creates a black hole that pulls opponent in
+      gravity: () => {
+        this.specialEffects.gravityWell = 5.0;
+        this.gravityWellX = this.x + this.facing * 150;
+        this.gravityWellY = this.y;
+        
+        SoundManager.beep(80, 1.0, 0.15);
         screenShake(12);
       }
     };
     
-    const baseUlt = this.id === 1 ? 'fireball' : 'dash';
-    if(ultimates[baseUlt]) {
-      ultimates[baseUlt].call(this);
+    if(ultimates[this.ultimateType]) {
+      ultimates[this.ultimateType].call(this);
       this.ultimate = 0; // reset charge
     }
   }
@@ -456,6 +537,18 @@ class Player{
     const px = Math.round(this.x); const py = Math.round(this.y);
     // invulnerable flash
     const flash = this.invulnerable>0 && Math.floor(performance.now()/80)%2===0;
+    
+    // Draw shadow clone first (behind player)
+    if(this.specialEffects.shadowClone) {
+      const shadowX = Math.round(this.shadowCloneX);
+      const shadowY = Math.round(this.shadowCloneY);
+      ctx.globalAlpha = 0.6;
+      ctx.fillStyle = '#444'; ctx.fillRect(shadowX,shadowY+10,this.w, this.h-10);
+      ctx.fillStyle = '#222'; ctx.fillRect(shadowX+6,shadowY, this.w-12, 14);
+      ctx.fillStyle = '#000'; ctx.fillRect(shadowX + (this.facing===1? this.w-14:8), shadowY+4, 4,4);
+      ctx.globalAlpha = 1.0;
+    }
+    
     // body
     ctx.fillStyle = flash ? '#fff' : this.color; ctx.fillRect(px,py+10,this.w, this.h-10);
     // head
@@ -464,6 +557,22 @@ class Player{
     ctx.fillStyle = '#000'; ctx.fillRect(px + (this.facing===1? this.w-14:8), py+4, 4,4);
     // damage tint
     if(this.damage>30){ ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(px,py,this.w,this.h); }
+    
+    // Draw gravity well effect
+    if(this.specialEffects.gravityWell) {
+      const wellX = Math.round(this.gravityWellX);
+      const wellY = Math.round(this.gravityWellY);
+      const time = performance.now() * 0.01;
+      
+      // Pulsing black hole effect
+      for(let i = 0; i < 3; i++) {
+        const radius = 20 + i * 8 + Math.sin(time + i) * 5;
+        ctx.beginPath();
+        ctx.arc(wellX, wellY, radius, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(0,0,0,${0.8 - i * 0.2})`;
+        ctx.fill();
+      }
+    }
   }
 }
 
@@ -542,8 +651,8 @@ const projectiles = [];
 const particles = [];
 let shake = {time:0,magnitude:0};
 
-const p1 = new Player(1, stage.spawnPoints[0].x, stage.spawnPoints[0].y, {left:'KeyA',right:'KeyD',up:'KeyW',attack:'KeyF',special:'KeyG',ultimate:'KeyH'});
-const p2 = new Player(2, stage.spawnPoints[1].x, stage.spawnPoints[1].y, {left:'ArrowLeft',right:'ArrowRight',up:'ArrowUp',attack:'KeyK',special:'KeyL',ultimate:'Semicolon'});
+const p1 = new Player(1, stage.spawnPoints[0].x, stage.spawnPoints[0].y, {left:'KeyA',right:'KeyD',up:'KeyW',down:'KeyS',attack:'KeyF',special:'KeyG',ultimate:'KeyH'});
+const p2 = new Player(2, stage.spawnPoints[1].x, stage.spawnPoints[1].y, {left:'ArrowLeft',right:'ArrowRight',up:'ArrowUp',down:'ArrowDown',attack:'KeyK',special:'KeyL',ultimate:'Semicolon'});
 let cpuEnabled = false; let cpuDifficulty = 'med';
 
 // basic CPU controller for p2 when enabled
@@ -649,6 +758,9 @@ function applyCharacterCustomization() {
   const p1SpecialEl = document.querySelector('input[name="p1-special"]:checked');
   if(p1SpecialEl) p1.specialType = p1SpecialEl.value;
   
+  const p1UltimateEl = document.querySelector('input[name="p1-ultimate"]:checked');
+  if(p1UltimateEl) p1.ultimateType = p1UltimateEl.value;
+  
   p1.stats.speed = parseFloat(document.getElementById('p1-speed').value);
   p1.stats.power = parseFloat(document.getElementById('p1-power').value);
   p1.stats.defense = parseFloat(document.getElementById('p1-defense').value);
@@ -657,13 +769,16 @@ function applyCharacterCustomization() {
   const p2SpecialEl = document.querySelector('input[name="p2-special"]:checked');
   if(p2SpecialEl) p2.specialType = p2SpecialEl.value;
   
+  const p2UltimateEl = document.querySelector('input[name="p2-ultimate"]:checked');
+  if(p2UltimateEl) p2.ultimateType = p2UltimateEl.value;
+  
   p2.stats.speed = parseFloat(document.getElementById('p2-speed').value);
   p2.stats.power = parseFloat(document.getElementById('p2-power').value);
   p2.stats.defense = parseFloat(document.getElementById('p2-defense').value);
   
   console.log('Character customization applied:', {
-    p1: {special: p1.specialType, stats: p1.stats},
-    p2: {special: p2.specialType, stats: p2.stats}
+    p1: {special: p1.specialType, ultimate: p1.ultimateType, stats: p1.stats},
+    p2: {special: p2.specialType, ultimate: p2.ultimateType, stats: p2.stats}
   });
 }
 
