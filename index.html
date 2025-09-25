@@ -19,15 +19,15 @@
               <h3>Player 1 (WASD+F/G/H)</h3>
               <div class="special-grid">
                 <label><input type="radio" name="p1-special" value="fireball" checked> 🔥 Fireball</label>
-                <label><input type="radio" name="p1-special" value="lightning"> ⚡ Lightning</label>
-                <label><input type="radio" name="p1-special" value="shield"> 🛡️ Shield</label>
+                <label><input type="radio" name="p1-special" value="grapple"> 🪝 Grapple</label>
+                <label><input type="radio" name="p1-special" value="timewarp"> ⏰ Time Warp</label>
                 <label><input type="radio" name="p1-special" value="teleport"> 🌀 Teleport</label>
                 <label><input type="radio" name="p1-special" value="dash"> 🚀 Dash</label>
               </div>
               <div class="ability-descriptions">
                 <p><strong>� Fireball:</strong> Projectile attack. Up/Down changes trajectory.</p>
-                <p><strong>⚡ Lightning:</strong> Fast lightning strike. Direction controls placement.</p>
-                <p><strong>🛡️ Shield:</strong> Absorbs attacks. Up = stronger, Down = quicker.</p>
+                <p><strong>🪝 Grapple:</strong> Hook ability. Up = grapple to platform, Neutral = pull enemy, Down = slam.</p>
+                <p><strong>⏰ Time Warp:</strong> Time manipulation. Up = slow enemy, Neutral = speed boost, Down = rewind position.</p>
                 <p><strong>🌀 Teleport:</strong> Instant movement. Up/Down teleports vertically.</p>
                 <p><strong>🚀 Dash:</strong> Speed burst. Up = air dash, Down = ground slam.</p>
               </div>
@@ -42,15 +42,15 @@
               <h3>Player 2 (Arrows+K/L/;)</h3>
               <div class="special-grid">
                 <label><input type="radio" name="p2-special" value="fireball"> � Fireball</label>
-                <label><input type="radio" name="p2-special" value="lightning"> ⚡ Lightning</label>
-                <label><input type="radio" name="p2-special" value="shield"> 🛡️ Shield</label>
+                <label><input type="radio" name="p2-special" value="grapple"> 🪝 Grapple</label>
+                <label><input type="radio" name="p2-special" value="timewarp"> ⏰ Time Warp</label>
                 <label><input type="radio" name="p2-special" value="teleport"> 🌀 Teleport</label>
                 <label><input type="radio" name="p2-special" value="dash" checked> 🚀 Dash</label>
               </div>
               <div class="ability-descriptions">
                 <p><strong>🔥 Fireball:</strong> Projectile attack. Up/Down changes trajectory.</p>
-                <p><strong>⚡ Lightning:</strong> Fast lightning strike. Direction controls placement.</p>
-                <p><strong>�️ Shield:</strong> Absorbs attacks. Up = stronger, Down = quicker.</p>
+                <p><strong>🪝 Grapple:</strong> Hook ability. Up = grapple to platform, Neutral = pull enemy, Down = slam.</p>
+                <p><strong>⏰ Time Warp:</strong> Time manipulation. Up = slow enemy, Neutral = speed boost, Down = rewind position.</p>
                 <p><strong>🌀 Teleport:</strong> Instant movement. Up/Down teleports vertically.</p>
                 <p><strong>🚀 Dash:</strong> Speed burst. Up = air dash, Down = ground slam.</p>
               </div>
@@ -69,8 +69,8 @@
             <label>AI Difficulty: <select id="opt-diff"><option value="easy">Easy</option><option value="med" selected>Normal</option><option value="hard">Hard</option></select></label>
           </div>
           <button id="btn-start">Start Match</button>
-          <p class="hint">Move: A/D or ←/→ • Jump: W or ↑ • Attack: F or K • Special: G or L • Ultimate: H or ;<br>
-          Hold Up/Down + Attack/Special for directional variants! KO at 175% damage!</p>
+          <p class="hint">Move: A/D or ←/→ • Jump: W or ↑ (double jump!) • Attack: F or K • Special: G or L • Ultimate: H or ;<br>
+          Hold Up/Down + Attack/Special for directional variants! Hold S/↓ on platform to drop through! KO at 175% damage!</p>
         </div>
 
         <div id="end-screen" class="overlay hidden">

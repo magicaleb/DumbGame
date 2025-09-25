@@ -154,6 +154,8 @@ class Player{
     this.jumpCount = 0; // for double jump
     this.hitstun = 0;
     this.invulnerable = 0;
+    this.wasJumping = false;
+    this.wasDownPressed = false;
     
     // New enhanced combat system
     this.specialType = id===1 ? 'fireball' : 'dash';
@@ -162,6 +164,7 @@ class Player{
     this.ultimateCooldown = 0;
     this.specialCooldown = 0; // Add missing property
     this.specialEffects = {}; // for temporary effects like shields, berserker mode
+    this.previousPositions = []; // For time warp rewind
   }
   spawn(x,y){ this.x=x; this.y=y; this.vx=0; this.vy=0; this.damage=0; this.alive=true; this.stocks=3; this.respawnTimer=0; }
   hurt(dmg, knock){ this.damage+=dmg; SoundManager.sfxHit(); this.vx += knock.x; this.vy += knock.y; }
@@ -176,9 +179,11 @@ class Player{
 
   // Apply stat modifiers and special effects
   let speedMod = this.stats.speed;
-  let frozen = !!this.specialEffects.frozen;
+  let frozen = !!this.specialEffects.frozen || !!this.specialEffects.slowTime;
   if(this.specialEffects.berserker) speedMod *= 1.5;
-  if(frozen) speedMod *= 0.1;
+  if(this.specialEffects.speedBoost) speedMod *= 2.0;
+  if(frozen) speedMod *= 0.3;
+  if(this.specialEffects.slowTime) speedMod *= 0.2;
 
   // horizontal movement
   const acc = 1400 * speedMod; const maxV = 420 * speedMod; const friction=0.85;
@@ -190,11 +195,28 @@ class Player{
   // gravity
   this.vy += 2200*dt;
 
-    // simple jump logic: allow double-jump
-    if(jump){
-      if(this.onGround){ this.vy = -700; this.onGround=false; this.jumpCount=1; SoundManager.sfxJump(); particlesJump(this.x+this.w/2,this.y+this.h); }
-      else if(this.jumpCount>0){ this.vy = -650; this.jumpCount=0; SoundManager.sfxJump(); particlesJump(this.x+this.w/2,this.y+this.h); }
+    // Enhanced double-jump system
+    if(jump && !this.wasJumping){
+      if(this.onGround || this.onPlatform){ 
+        // First jump
+        this.vy = -750 * this.stats.speed; 
+        this.onGround = false; 
+        this.jumpCount = 1; 
+        SoundManager.sfxJump(); 
+        particlesJump(this.x+this.w/2, this.y+this.h); 
+      } else if(this.jumpCount > 0){ 
+        // Second jump (air jump)
+        this.vy = -700 * this.stats.speed; 
+        this.jumpCount = 0; 
+        SoundManager.sfxJump(); 
+        particlesJump(this.x+this.w/2, this.y+this.h);
+        // Extra particles for double jump
+        for(let i = 0; i < 5; i++) {
+          particlesHit(this.x + this.w/2 + (Math.random()-0.5)*30, this.y + this.h);
+        }
+      }
     }
+    this.wasJumping = jump;
 
     // special ability with directional input
     if(special && this.attackCooldown<=0 && !this.specialCooldown){ 
@@ -261,16 +283,33 @@ class Player{
     this.onGround = false; this.onPlatform = null;
     // ground
     if(this.y + this.h > stage.groundY){ this.y = stage.groundY - this.h; this.vy = 0; this.onGround = true; }
-    // platforms: allow jump-through from below by only colliding when above and falling
+    // platforms: allow jump-through from below and drop-through from above
+    const downPressed = input.isDown(this.controls.down);
     for(const p of stage.platforms){
       if(this.x+this.w > p.x && this.x < p.x+p.w){
-        const wasAbove = (this.y + this.h - this.vy*dt) <= p.y; // approx
+        const wasAbove = (this.y + this.h - this.vy*dt) <= p.y;
+        
+        // Check if player wants to drop through
+        if(this.onPlatform === p && downPressed && !this.wasDownPressed) {
+          // Drop through platform
+          this.y += 10; // Move slightly down to clear platform
+          this.onGround = false;
+          this.onPlatform = null;
+          continue; // Skip collision for this platform
+        }
+        
         if(wasAbove && this.y + this.h > p.y && this.y + this.h < p.y + p.h + 200){
-          // land on platform
-          if(this.vy >= 0){ this.y = p.y - this.h; this.vy = 0; this.onGround=true; this.onPlatform=p; }
+          // land on platform (only if not trying to drop through)
+          if(this.vy >= 0 && !downPressed){ 
+            this.y = p.y - this.h; 
+            this.vy = 0; 
+            this.onGround = true; 
+            this.onPlatform = p; 
+          }
         }
       }
     }
+    this.wasDownPressed = downPressed;
 
   // check off-screen for KO or 175% damage
   if(this.y > H+300 || this.damage >= 175){ this.loseStock(); }
@@ -294,7 +333,14 @@ class Player{
     if(this.ultimate < 100) {
       this.ultimate += dt * 8; // Passive charge
       this.ultimate = Math.min(100, this.ultimate);
-    }    // re-enable grabbing after some frames
+    }
+    
+    // Track position history for time warp rewind (keep last 3 seconds)
+    this.previousPositions.push({x: this.x, y: this.y, t: performance.now()});
+    const now = performance.now();
+    this.previousPositions = this.previousPositions.filter(pos => now - pos.t < 3000);
+    
+    // re-enable grabbing after some frames
     if(!this.canGrab){ this.canGrab = true; }
 
     // animation timer
@@ -397,26 +443,81 @@ class Player{
         projectiles.push(new Projectile(this.x+this.w/2, this.y+30, vx, vy, this.id, 'fireball'));
         SoundManager.sfxPower();
       },
-      lightning: () => {
-        // Lightning strike with directional control
-        let strikeX = this.x + this.w/2 + this.facing * 100;
-        let strikeY = 0;
+      grapple: () => {
+        // Grapple hook - pulls enemy towards you or you towards platforms
+        const target = this.id === 1 ? p2 : p1;
+        let grappleTarget = null;
         
-        if(direction === 'up') strikeY = this.y - 200; // Lightning above
-        else if(direction === 'down') strikeY = this.y + 100; // Lightning below
+        if(direction === 'up') {
+          // Grapple to platform above
+          for(const platform of stage.platforms) {
+            if(Math.abs(platform.x + platform.w/2 - (this.x + this.w/2)) < 150 && 
+               platform.y < this.y && platform.y > this.y - 200) {
+              grappleTarget = {x: platform.x + platform.w/2, y: platform.y, type: 'platform'};
+              break;
+            }
+          }
+          if(grappleTarget) {
+            // Pull self to platform
+            const dx = grappleTarget.x - (this.x + this.w/2);
+            const dy = grappleTarget.y - this.y;
+            this.vx = dx * 3;
+            this.vy = dy * 3 - 200; // Add upward boost
+          }
+        } else if(direction === 'down') {
+          // Slam grapple downward
+          this.vy = 600;
+          this.specialEffects.grappleSlam = 1.0;
+        } else {
+          // Grapple enemy - pull them toward you
+          const distance = Math.abs(target.x - this.x);
+          if(distance < 300) {
+            const pullForce = Math.max(200, 500 - distance);
+            target.vx += this.facing * pullForce;
+            target.vy -= 100;
+            // Also pull self slightly toward enemy
+            this.vx -= this.facing * (pullForce * 0.3);
+          }
+        }
         
-        projectiles.push(new Projectile(strikeX, strikeY, 0, 800, this.id, 'lightning'));
-        SoundManager.beep(1200, 0.1, 0.08);
-        screenShake(8);
+        SoundManager.beep(600, 0.15, 0.08);
+        particlesHit(this.x + this.w/2, this.y + this.h/2);
       },
-      shield: () => {
-        let shieldDuration = 3.0;
-        if(direction === 'up') shieldDuration = 5.0; // Stronger overhead shield
-        if(direction === 'down') shieldDuration = 2.0; // Quick ground shield
+      timewarp: () => {
+        // Time manipulation ability
+        if(direction === 'up') {
+          // Slow time for everyone except self
+          this.specialEffects.timeWarp = 3.0;
+          const other = this.id === 1 ? p2 : p1;
+          other.specialEffects.slowTime = 3.0;
+          // Slow projectiles too
+          for(const proj of projectiles) {
+            if(proj.owner !== this.id) {
+              proj.vx *= 0.3;
+              proj.vy *= 0.3;
+              proj.life *= 3; // Compensate for slower movement
+            }
+          }
+        } else if(direction === 'down') {
+          // Rewind position (teleport to previous position)
+          if(this.previousPositions && this.previousPositions.length > 0) {
+            const oldPos = this.previousPositions[Math.floor(this.previousPositions.length * 0.7)];
+            this.x = oldPos.x;
+            this.y = oldPos.y;
+            this.vx = 0;
+            this.vy = 0;
+          }
+        } else {
+          // Speed boost for self
+          this.specialEffects.speedBoost = 2.0;
+          this.vx *= 1.5;
+        }
         
-        this.specialEffects.shield = shieldDuration;
-        SoundManager.beep(600, 0.2, 0.06);
-        particlesHit(this.x+this.w/2, this.y+this.h/2);
+        SoundManager.beep(400, 0.3, 0.1);
+        screenShake(5);
+        for(let i = 0; i < 8; i++) {
+          particlesHit(this.x + Math.random() * this.w, this.y + Math.random() * this.h);
+        }
       },
       teleport: () => {
         let newX = this.x;
@@ -511,8 +612,34 @@ class Player{
     }
   }
 
-  loseStock(){ this.stocks -= 1; SoundManager.sfxKO(); this.alive=false; if(this.stocks>0){ this.respawnTimer = 2.0; } }
-  respawn(){ if(this.stocks<=0){ /* out */ } else { const s = stage.spawnPoints[this.id-1]; this.x=s.x; this.y=s.y; this.vx=0; this.vy=0; this.alive=true; } }
+  loseStock(){ 
+    this.stocks -= 1; 
+    SoundManager.sfxKO(); 
+    this.alive=false; 
+    if(this.stocks>0){ 
+      this.respawnTimer = 2.0; 
+    } 
+  }
+  
+  respawn(){ 
+    if(this.stocks<=0){ 
+      /* game over */ 
+    } else { 
+      const s = stage.spawnPoints[this.id-1]; 
+      this.x = s.x; 
+      this.y = s.y; 
+      this.vx = 0; 
+      this.vy = 0; 
+      this.damage = 0; // Reset damage on respawn
+      this.alive = true; 
+      this.invulnerable = 2.0; // Give respawn invincibility
+      this.hitstun = 0;
+      // Clear any negative special effects
+      this.specialEffects = {};
+      // Reset position history
+      this.previousPositions = [];
+    } 
+  }
 
   draw(){ if(!this.alive) return;
     const px = Math.round(this.x); const py = Math.round(this.y);
