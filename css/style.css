@@ -29,6 +29,9 @@ button{padding:12px 24px;background:var(--accent);border:none;color:#000;font-we
 .special-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
 .special-grid label{display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer}
 .special-grid input[type=radio]{margin:0}
+.ultimate-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.ultimate-grid label{display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer}
+.ultimate-grid input[type=radio]{margin:0}
 .stat-sliders{margin-top:16px}
 .stat-sliders label{display:block;margin:6px 0;font-size:12px;color:#ccc}
 .ultimate-bar{width:80px;height:8px;background:#333;border:1px solid #555;margin-top:4px;position:relative}
