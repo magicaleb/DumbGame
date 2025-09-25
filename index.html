@@ -19,17 +19,28 @@
               <h3>Player 1 (WASD+F/G/H)</h3>
               <div class="special-grid">
                 <label><input type="radio" name="p1-special" value="fireball" checked> 🔥 Fireball</label>
-                <label><input type="radio" name="p1-special" value="grapple"> 🪝 Grapple</label>
+                <label><input type="radio" name="p1-special" value="grapple"> � Grapple</label>
                 <label><input type="radio" name="p1-special" value="timewarp"> ⏰ Time Warp</label>
                 <label><input type="radio" name="p1-special" value="teleport"> 🌀 Teleport</label>
                 <label><input type="radio" name="p1-special" value="dash"> 🚀 Dash</label>
+                <label><input type="radio" name="p1-special" value="shield"> 🛡️ Shield</label>
+                <label><input type="radio" name="p1-special" value="lightning"> ⚡ Lightning</label>
               </div>
               <div class="ability-descriptions">
-                <p><strong>� Fireball:</strong> Projectile attack. Up/Down changes trajectory.</p>
-                <p><strong>🪝 Grapple:</strong> Hook ability. Up = grapple to platform, Neutral = pull enemy, Down = slam.</p>
+                <p><strong>🔥 Fireball:</strong> Projectile attack. Up/Down changes trajectory.</p>
+                <p><strong>� Grapple:</strong> Hook ability. Up = grapple to platform, Neutral = pull enemy, Down = slam.</p>
                 <p><strong>⏰ Time Warp:</strong> Time manipulation. Up = slow enemy, Neutral = speed boost, Down = rewind position.</p>
                 <p><strong>🌀 Teleport:</strong> Instant movement. Up/Down teleports vertically.</p>
                 <p><strong>🚀 Dash:</strong> Speed burst. Up = air dash, Down = ground slam.</p>
+                <p><strong>�️ Shield:</strong> Temporary shield blocks attacks.</p>
+                <p><strong>⚡ Lightning:</strong> Instant lightning strike.</p>
+              </div>
+              <div class="ultimate-grid">
+                <label><input type="radio" name="p1-ultimate" value="meteor" checked> ☄️ Meteor Storm</label>
+                <label><input type="radio" name="p1-ultimate" value="chronos"> ⏰ Time Freeze</label>
+                <label><input type="radio" name="p1-ultimate" value="shadow"> 👥 Shadow Clone</label>
+                <label><input type="radio" name="p1-ultimate" value="blitz"> ⚡ Lightning Blitz</label>
+                <label><input type="radio" name="p1-ultimate" value="gravity"> 🌑 Gravity Well</label>
               </div>
               <div class="stat-sliders">
                 <label>Speed: <input type="range" id="p1-speed" min="0.5" max="1.5" step="0.1" value="1.0"></label>
@@ -41,6 +52,7 @@
             <div class="player-setup">
               <h3>Player 2 (Arrows+K/L/;)</h3>
               <div class="special-grid">
+<<<<<<< HEAD
                 <label><input type="radio" name="p2-special" value="fireball"> � Fireball</label>
                 <label><input type="radio" name="p2-special" value="grapple"> 🪝 Grapple</label>
                 <label><input type="radio" name="p2-special" value="timewarp"> ⏰ Time Warp</label>
@@ -53,6 +65,20 @@
                 <p><strong>⏰ Time Warp:</strong> Time manipulation. Up = slow enemy, Neutral = speed boost, Down = rewind position.</p>
                 <p><strong>🌀 Teleport:</strong> Instant movement. Up/Down teleports vertically.</p>
                 <p><strong>🚀 Dash:</strong> Speed burst. Up = air dash, Down = ground slam.</p>
+=======
+                <label><input type="radio" name="p2-special" value="fireball"> 🔥 Fireball</label>
+                <label><input type="radio" name="p2-special" value="dash" checked> 🚀 Dash</label>
+                <label><input type="radio" name="p2-special" value="teleport"> 🌀 Teleport</label>
+                <label><input type="radio" name="p2-special" value="shield"> 🛡️ Shield</label>
+                <label><input type="radio" name="p2-special" value="lightning"> ⚡ Lightning</label>
+              </div>
+              <div class="ultimate-grid">
+                <label><input type="radio" name="p2-ultimate" value="meteor"> ☄️ Meteor Storm</label>
+                <label><input type="radio" name="p2-ultimate" value="chronos"> ⏰ Time Freeze</label>
+                <label><input type="radio" name="p2-ultimate" value="shadow"> 👥 Shadow Clone</label>
+                <label><input type="radio" name="p2-ultimate" value="blitz" checked> ⚡ Lightning Blitz</label>
+                <label><input type="radio" name="p2-ultimate" value="gravity"> 🌑 Gravity Well</label>
+>>>>>>> 88cc38ca69ab73d4099b7e006589fb36a801ca15
               </div>
               <div class="stat-sliders">
                 <label>Speed: <input type="range" id="p2-speed" min="0.5" max="1.5" step="0.1" value="1.0"></label>
@@ -69,13 +95,24 @@
             <label>AI Difficulty: <select id="opt-diff"><option value="easy">Easy</option><option value="med" selected>Normal</option><option value="hard">Hard</option></select></label>
           </div>
           <button id="btn-start">Start Match</button>
+<<<<<<< HEAD
           <p class="hint">Move: A/D or ←/→ • Jump: W or ↑ (double jump!) • Attack: F or K • Special: G or L • Ultimate: H or ;<br>
           Hold Up/Down + Attack/Special for directional variants! Hold S/↓ on platform to drop through! KO at 175% damage!</p>
+=======
+          <p class="hint">Move: A/D or ←/→ • Jump: W or ↑ (double-tap for double jump) • Attack: F or K (+ direction for up/down attacks) • Special: G or L • Ultimate: H or ; • Pause: ESC</p>
+>>>>>>> 88cc38ca69ab73d4099b7e006589fb36a801ca15
         </div>
 
         <div id="end-screen" class="overlay hidden">
           <h1 id="end-title">Player X Wins!</h1>
           <button id="btn-restart">Restart Match</button>
+        </div>
+
+        <div id="pause-screen" class="overlay hidden">
+          <h1>Game Paused</h1>
+          <button id="btn-resume">Resume Game</button>
+          <button id="btn-main-menu">Main Menu</button>
+          <p class="hint">Press ESC to resume</p>
         </div>
 
         <div id="hud">
