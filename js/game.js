@@ -7,8 +7,11 @@ const W = canvas.width; const H = canvas.height;
 
 const startScreen = document.getElementById('start-screen');
 const endScreen = document.getElementById('end-screen');
+const pauseScreen = document.getElementById('pause-screen');
 const btnStart = document.getElementById('btn-start');
 const btnRestart = document.getElementById('btn-restart');
+const btnResume = document.getElementById('btn-resume');
+const btnMainMenu = document.getElementById('btn-main-menu');
 const endTitle = document.getElementById('end-title');
 
 const p1StocksEl = document.getElementById('p1-stocks');
@@ -113,8 +116,56 @@ if(musicToggle && volumeSlider){
 }
 
 class Input{
-  constructor(){ this.keys = {}; window.addEventListener('keydown',e=>{this.keys[e.code]=true;}); window.addEventListener('keyup',e=>{this.keys[e.code]=false;}); }
+  constructor(){ 
+    this.keys = {}; 
+    this.keyPressTime = {}; // Track when keys were pressed
+    this.keyReleaseTime = {}; // Track when keys were released
+    
+    window.addEventListener('keydown',e=>{
+      if(!this.keys[e.code]) { // Only on initial press, not repeat
+        this.keys[e.code] = true;
+        this.keyPressTime[e.code] = performance.now();
+        
+        // Handle global pause key (Escape)
+        if(e.code === 'Escape') {
+          togglePause();
+        }
+      }
+    }); 
+    window.addEventListener('keyup',e=>{
+      this.keys[e.code] = false;
+      this.keyReleaseTime[e.code] = performance.now();
+    }); 
+  }
+  
   isDown(code){return !!this.keys[code];}
+  
+  wasPressed(code) {
+    // Check if key was just pressed this frame
+    const pressTime = this.keyPressTime[code];
+    const now = performance.now();
+    return pressTime && (now - pressTime) < 50; // 50ms window for "just pressed"
+  }
+  
+  isDoubleTap(code, maxDelay = 300) {
+    if(!this.wasPressed(code)) return false;
+    
+    const now = performance.now();
+    const lastRelease = this.keyReleaseTime[code];
+    const currentPress = this.keyPressTime[code];
+    
+    if(!lastRelease || !currentPress) return false;
+    
+    // Check if the time between last release and current press is within double-tap window
+    const timeBetween = currentPress - lastRelease;
+    if(timeBetween < maxDelay && timeBetween > 30) { // 30ms minimum to avoid bounce
+      // Reset to prevent multiple triggers
+      this.keyReleaseTime[code] = 0;
+      return true;
+    }
+    
+    return false;
+  }
 }
 
 const input = new Input();
@@ -196,29 +247,45 @@ class Player{
   // gravity
   this.vy += 2200*dt;
 
-    // simple jump logic: allow double-jump
-    if(jump){
-      if(this.onGround){ this.vy = -700; this.onGround=false; this.jumpCount=1; SoundManager.sfxJump(); particlesJump(this.x+this.w/2,this.y+this.h); }
-      else if(this.jumpCount>0){ this.vy = -650; this.jumpCount=0; SoundManager.sfxJump(); particlesJump(this.x+this.w/2,this.y+this.h); }
+    // Enhanced jump logic: single press for ground jump, double tap for air jump
+    const jumpJustPressed = input.wasPressed(this.controls.up);
+    const doubleJumpTapped = input.isDoubleTap(this.controls.up);
+    
+    if(jumpJustPressed && this.onGround){ 
+      // Ground jump - always works on single press
+      this.vy = -700; 
+      this.onGround=false; 
+      this.jumpCount=1; 
+      SoundManager.sfxJump(); 
+      particlesJump(this.x+this.w/2,this.y+this.h); 
+    }
+    else if(doubleJumpTapped && !this.onGround && this.jumpCount > 0) {
+      // Double jump - only works when airborne and has jump count remaining
+      this.vy = -650; 
+      this.jumpCount=0; 
+      SoundManager.sfxJump(); 
+      particlesJump(this.x+this.w/2,this.y+this.h);
     }
 
-    // special ability
-    if(special && this.attackCooldown<=0 && !this.specialCooldown){ 
-      this.attackCooldown = 0.3; 
-      this.specialCooldown = 0.8; // Reduced cooldown for more fun
+    // special ability - improved responsiveness
+    const specialPressed = input.wasPressed(this.controls.special);
+    if(specialPressed && this.attackCooldown<=0 && !this.specialCooldown){ 
+      this.attackCooldown = 0.25; 
+      this.specialCooldown = 0.7; // Slightly reduced cooldown for more fun
       this.doSpecial(); 
     }
     
-    // ultimate ability (new key binding)
-    const ultimate = input.isDown(this.controls.ultimate);
-    if(ultimate && this.ultimate >= 100 && this.ultimateCooldown <= 0){
-      this.ultimateCooldown = 3.0;
+    // ultimate ability - improved responsiveness
+    const ultimatePressed = input.wasPressed(this.controls.ultimate);
+    if(ultimatePressed && this.ultimate >= 100 && this.ultimateCooldown <= 0){
+      this.ultimateCooldown = 2.5; // Reduced cooldown
       this.doUltimate();
     }
     
-    // attack with directional support
-    if(attack && this.attackCooldown<=0 && this.hitstun <= 0){ 
-      this.attackCooldown = 0.25 / this.stats.speed; // Speed affects attack speed
+    // attack with directional support - improved responsiveness
+    const attackPressed = input.wasPressed(this.controls.attack);
+    if(attackPressed && this.attackCooldown<=0 && this.hitstun <= 0){ 
+      this.attackCooldown = 0.2 / this.stats.speed; // Reduced cooldown for more responsive combat
       
       // Determine attack direction based on input
       let attackDir = 'horizontal';
@@ -326,17 +393,17 @@ class Player{
 
   doAttack(other, direction = 'horizontal'){
     // Enhanced attack with stat scaling and directional support
-    const range = (50 + Math.min(200, this.damage*0.5)) * this.stats.power;
+    const range = (60 + Math.min(180, this.damage*0.4)) * this.stats.power; // Improved range scaling
     let hx, hy, hw, hh;
     
-    // Set hitbox based on attack direction
+    // Set hitbox based on attack direction - improved hitboxes
     if(direction === 'up') {
-      hx = this.x + 5; hy = this.y - 50; hw = this.w - 10; hh = 60;
+      hx = this.x - 5; hy = this.y - 60; hw = this.w + 10; hh = 70;
     } else if(direction === 'down') {
-      hx = this.x + 5; hy = this.y + this.h - 10; hw = this.w - 10; hh = 60;
-    } else { // horizontal
-      hx = this.facing===1 ? this.x+this.w : this.x-range;
-      hy = this.y + 20; hw = range; hh = 30;
+      hx = this.x - 5; hy = this.y + this.h - 10; hw = this.w + 10; hh = 70;
+    } else { // horizontal - larger hitbox for better hit detection
+      hx = this.facing===1 ? this.x+this.w-10 : this.x-range+10;
+      hy = this.y + 15; hw = range; hh = 40;
     }
     
     SoundManager.sfxAttack();
@@ -344,8 +411,8 @@ class Player{
     // Check for special dash attack
     const isDashAttack = !!this.specialEffects.dashAttack;
     
-    // draw hit effect
-    effects.push({type:'hit',x:hx,y:hy,t:0.15,size:isDashAttack?2:1,direction:direction});
+    // Enhanced visual effects
+    effects.push({type:'hit',x:hx,y:hy,t:0.2,size:isDashAttack?2.5:1.5,direction:direction});
     
     // hit detection
     if(rectsOverlap({x:hx,y:hy,w:hw,h:hh},{x:other.x,y:other.y,w:other.w,h:other.h})){ 
@@ -353,47 +420,60 @@ class Player{
       if(other.specialEffects.counter) {
         // Counter attack!
         other.specialEffects.counter = 0;
-        this.hurt(8, {x: -this.facing*400, y: -300});
-        SoundManager.beep(800, 0.1, 0.08);
+        this.hurt(10, {x: -this.facing*400, y: -300});
+        SoundManager.beep(800, 0.15, 0.1);
+        screenShake(8);
         return;
       }
       
       // Check for shield
       if(other.specialEffects.shield) {
         other.specialEffects.shield -= 1.0;
-        SoundManager.beep(900, 0.05, 0.04);
-        screenShake(3);
+        SoundManager.beep(900, 0.08, 0.06);
+        screenShake(4);
+        // Create shield spark effects
+        for(let i=0; i<6; i++) {
+          particles.push({
+            x: other.x + other.w/2 + (Math.random()*30-15),
+            y: other.y + other.h/2 + (Math.random()*30-15), 
+            vx: (Math.random()*200-100), 
+            vy: (Math.random()*-150), 
+            t: 0.4, 
+            col: '#77ddff', 
+            s: 3
+          });
+        }
         return;
       }
       
-      const baseDmg = isDashAttack ? 10 : 8;
-      const dmg = baseDmg * this.stats.power * (this.specialEffects.berserker ? 1.4 : 1);
-      const knockFactor = (12 + other.damage*0.12) * this.stats.power;
+      const baseDmg = isDashAttack ? 12 : 9; // Slightly increased base damage
+      const dmg = baseDmg * this.stats.power * (this.specialEffects.berserker ? 1.5 : 1);
+      const knockFactor = (14 + other.damage*0.1) * this.stats.power; // Improved knockback scaling
       const defenseReduction = 1 / other.stats.defense;
       
-      // Directional knockback
+      // Improved directional knockback
       let kx, ky;
       if(direction === 'up') {
-        kx = this.facing * knockFactor * 15 * defenseReduction;
-        ky = -600 * defenseReduction * (1 + other.damage*0.015); // Strong upward
+        kx = this.facing * knockFactor * 18 * defenseReduction;
+        ky = -650 * defenseReduction * (1 + other.damage*0.02); // Stronger upward launch
       } else if(direction === 'down') {
-        kx = this.facing * knockFactor * 10 * defenseReduction;
-        ky = 300 * defenseReduction; // Downward spike
+        kx = this.facing * knockFactor * 12 * defenseReduction;
+        ky = 350 * defenseReduction; // Better spike potential
       } else { // horizontal
-        kx = this.facing*knockFactor*25*defenseReduction*(1 + other.damage*0.008);
-        ky = -420*defenseReduction*(1 + other.damage*0.012);
+        kx = this.facing*knockFactor*28*defenseReduction*(1 + other.damage*0.01);
+        ky = -450*defenseReduction*(1 + other.damage*0.015);
       }
       
       if(other.invulnerable<=0){ 
         other.hurt(dmg*defenseReduction, {x:kx, y:ky}); 
         SoundManager.sfxRandomPunch(); 
-        other.hitstun = 0.2 / other.stats.speed; 
+        other.hitstun = 0.25 / other.stats.speed; // Slightly increased hitstun
         particlesHit(other.x+other.w/2, other.y+other.h/2); 
-        screenShake(isDashAttack ? 10 : 7); 
-        other.invulnerable = 0.1;
+        screenShake(isDashAttack ? 12 : 8); // More satisfying screen shake
+        other.invulnerable = 0.15; // Longer invulnerability for cleaner combat
         
         // Charge ultimate from successful hits
-        this.ultimate = Math.min(100, this.ultimate + (isDashAttack ? 15 : 8));
+        this.ultimate = Math.min(100, this.ultimate + (isDashAttack ? 18 : 10));
       }
     }
   }
@@ -682,10 +762,20 @@ function updateCPU(dt){
 
 let last = performance.now();
 let running = false;
+let paused = false;
 
 function update(){
   const now = performance.now(); const dt = Math.min(1/30,(now-last)/1000); last = now;
-  if(!running) return;
+  if(!running || paused) {
+    // Continue rendering but don't update game state when paused
+    if(running) {
+      draw();
+      drawHUD();
+    }
+    requestAnimationFrame(update);
+    return;
+  }
+  
   p1.update(dt,stage,p2); p2.update(dt,stage,p1);
   updateCPU(dt);
   for(const pr of projectiles) pr.update(dt,[p1,p2]);
@@ -719,17 +809,52 @@ function draw(){
   ctx.restore();
 }
 
-function showStart(){ startScreen.classList.remove('hidden'); endScreen.classList.add('hidden'); }
+function showStart(){ startScreen.classList.remove('hidden'); endScreen.classList.add('hidden'); pauseScreen.classList.add('hidden'); }
 function startMatch(){ 
   applyCharacterCustomization();
   startScreen.classList.add('hidden'); 
   endScreen.classList.add('hidden'); 
+  pauseScreen.classList.add('hidden');
   running=true; 
+  paused=false;
   last=performance.now(); 
   SoundManager.init(); 
   requestAnimationFrame(update); 
 }
-function showEnd(){ endScreen.classList.remove('hidden'); startScreen.classList.add('hidden'); endTitle.textContent = p1.stocks>p2.stocks ? 'Player 1 Wins!' : 'Player 2 Wins!'; }
+function showEnd(){ endScreen.classList.remove('hidden'); startScreen.classList.add('hidden'); pauseScreen.classList.add('hidden'); endTitle.textContent = p1.stocks>p2.stocks ? 'Player 1 Wins!' : 'Player 2 Wins!'; }
+
+function togglePause() {
+  if(!running) return; // Can't pause if not running
+  
+  paused = !paused;
+  if(paused) {
+    pauseScreen.classList.remove('hidden');
+    SoundManager.stopMusic();
+  } else {
+    pauseScreen.classList.add('hidden');
+    if(document.getElementById('music-toggle').checked) {
+      SoundManager.startMusic();
+    }
+  }
+  SoundManager.sfxUI();
+}
+
+function resumeGame() {
+  paused = false;
+  pauseScreen.classList.add('hidden');
+  if(document.getElementById('music-toggle').checked) {
+    SoundManager.startMusic();
+  }
+  SoundManager.sfxUI();
+}
+
+function returnToMainMenu() {
+  running = false;
+  paused = false;
+  SoundManager.stopMusic();
+  showStart();
+  SoundManager.sfxUI();
+}
 
 btnStart.addEventListener('click', ()=>{
   // read options
@@ -751,6 +876,8 @@ btnStart.addEventListener('click', ()=>{
   SoundManager.startMusic(); SoundManager.sfxUI(); startMatch();
 });
 btnRestart.addEventListener('click', ()=>{ p1.stocks=3; p2.stocks=3; p1.damage=0; p2.damage=0; p1.alive=true; p2.alive=true; SoundManager.sfxUI(); startMatch(); });
+btnResume.addEventListener('click', resumeGame);
+btnMainMenu.addEventListener('click', returnToMainMenu);
 
 // Function to apply character customization
 function applyCharacterCustomization() {
