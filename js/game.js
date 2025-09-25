@@ -208,7 +208,7 @@ class Player{
     
     // New enhanced combat system
     this.specialType = id===1 ? 'fireball' : 'dash';
-    this.ultimateType = id===1 ? 'meteor' : 'blitz'; // Default ultimates
+  this.ultimateType = id===1 ? 'meteor' : 'blitz'; // Default ultimates
     this.stats = {speed: 1.0, power: 1.0, defense: 1.0, agility: 1.0};
     this.ultimate = 0; // 0-100 charge
     this.ultimateCooldown = 0;
@@ -339,8 +339,28 @@ class Player{
       }
     }
 
-  // check off-screen for KO
-  if(this.y > H+300){ this.loseStock(); }
+    // check off-screen for KO or high damage
+    if(this.y > H+300 || this.damage >= 175){ this.loseStock(); }
+
+    // Cyclone Fury effect: if affected, pull toward center and launch
+    if(this.specialEffects.cyclone) {
+      const centerX = W/2, centerY = H/2;
+      const dx = centerX - this.x;
+      const dy = centerY - this.y;
+      this.vx += dx * 0.08 * dt;
+      this.vy += dy * 0.08 * dt;
+      if(this.specialEffects.cyclone < 0.5) {
+        this.vy = -900;
+        this.vx += (Math.random()-0.5)*600;
+      }
+    }
+
+    // Add random stage hazards
+    if(Math.random() < 0.002) {
+      // Falling rock
+      const rx = Math.random()*W;
+      projectiles.push(new Projectile(rx, -30, 0, 700, 0, 'rock'));
+    }
 
     // Update timers
     if(this.attackCooldown>0) this.attackCooldown -= dt;
@@ -663,84 +683,101 @@ class Projectile{
     // Type-specific properties
     if(type === 'fireball') {
       this.w=18; this.h=18; this.damage=8; this.knockback=260; this.color='#ff5555';
-    } else if(type === 'lightning') {
-      this.w=12; this.h=40; this.damage=10; this.knockback=200; this.color='#ffff55';
-      this.life = 0.3; this.vy = 0; // Lightning doesn't fall
-    } else if(type === 'ultimate') {
-      this.w=40; this.h=40; this.damage=25; this.knockback=500; this.color='#ff00ff';
-      this.life = 1.8;
-    }
-  }
-  
-  update(dt,players){ 
-    if(this.type !== 'lightning') this.vy += 1600*dt; 
-    this.x += this.vx*dt; 
-    this.y += this.vy*dt; 
-    this.life -= dt; 
-    
-    // bounds
-    if(this.y > H || this.x < -50 || this.x > W+50) this.life=0;
-    
-    // Hit detection
-    for(const p of players){ 
-      if(p.id !== this.owner && p.alive && p.invulnerable <= 0 && rectsOverlap({x:this.x,y:this.y,w:this.w,h:this.h},{x:p.x,y:p.y,w:p.w,h:p.h})){
-        // Check for shields
-        if(p.specialEffects.shield && this.type !== 'ultimate') {
-          p.specialEffects.shield -= 1.0;
-          SoundManager.beep(900, 0.05, 0.04);
-          this.life = 0;
-          return;
+    const ultimates = {
+      meteor: () => {
+        for(let i = 0; i < 8; i++){
+          setTimeout(() => {
+            const x = Math.random() * W;
+            const vy = 600 + Math.random() * 300;
+            projectiles.push(new Projectile(x, -50, Math.random()*200-100, vy, this.id, 'ultimate'));
+          }, i * 300);
         }
-        
-        const knockX = Math.sign(this.vx) * this.knockback;
-        const knockY = this.type === 'ultimate' ? -400 : -260;
-        p.hurt(this.damage, {x:knockX, y:knockY}); 
-        this.life=0; 
-        SoundManager.sfxHit(); 
-        particlesHit(p.x+p.w/2, p.y+p.h/2);
-        screenShake(this.type === 'ultimate' ? 12 : 6);
-        p.invulnerable = this.type === 'ultimate' ? 0.3 : 0.1;
+        SoundManager.beep(120, 1.2, 0.15);
+        screenShake(20);
+      },
+      chronos: () => {
+        const target = this.id === 1 ? p2 : p1;
+        target.specialEffects.frozen = 4.0;
+        this.specialEffects.timeBoost = 4.0;
+        for(let i = 0; i < 20; i++){
+          particles.push({
+            x: target.x + Math.random()*60-30, 
+            y: target.y + Math.random()*80-40, 
+            vx: 0, vy: 0, t: 2.0, col: '#00ffff', s: 3
+          });
+        }
+        SoundManager.beep(800, 0.3, 0.1);
+        screenShake(8);
+      },
+      cyclone: () => {
+        // Cyclone Fury: giant tornado pulls in and launches opponents
+        const target = this.id === 1 ? p2 : p1;
+        target.specialEffects.cyclone = 3.0;
+        for(let i = 0; i < 30; i++){
+          particles.push({
+            x: target.x + Math.random()*80-40,
+            y: target.y + Math.random()*100-50,
+            vx: Math.random()*200-100,
+            vy: Math.random()*-300,
+            t: 1.2,
+            col: '#aaf',
+            s: 4
+          });
+        }
+        SoundManager.beep(600, 0.7, 0.12);
+        screenShake(18);
+      },
+      magnet: () => {
+        // Magnet Mayhem: pull all projectiles and players toward you, then explode
+        for(let i = 0; i < 40; i++){
+          particles.push({
+            x: this.x + Math.random()*100-50,
+            y: this.y + Math.random()*100-50,
+            vx: Math.random()*300-150,
+            vy: Math.random()*-300,
+            t: 1.5,
+            col: '#ff0',
+            s: 5
+          });
+        }
+        // Pull projectiles
+        for(const pr of projectiles){
+          pr.vx = (this.x - pr.x) * 2;
+          pr.vy = (this.y - pr.y) * 2;
+        }
+        // Pull opponent
+        const target = this.id === 1 ? p2 : p1;
+        target.vx += (this.x - target.x) * 3;
+        target.vy += (this.y - target.y) * 3;
+        setTimeout(() => {
+          target.hurt(30, {x: (target.x-this.x)*2, y: -600});
+          SoundManager.sfxPower();
+          screenShake(22);
+        }, 800);
+        SoundManager.beep(900, 1.0, 0.15);
+      },
+      blitz: () => {
+        this.specialEffects.lightningBlitz = 2.0;
+        this.invulnerable = 2.0;
+        this.vx = this.facing * 1500;
+        for(let i = 0; i < 15; i++){
+          setTimeout(() => {
+            particles.push({
+              x: this.x + Math.random()*40-20, 
+              y: this.y + Math.random()*60-30, 
+              vx: -this.vx * 0.3, vy: Math.random()*200-100, 
+              t: 0.5, col: '#ffff00', s: 2
+            });
+          }, i * 50);
+        }
+        SoundManager.beep(1000, 0.8, 0.12);
+        screenShake(15);
       }
+    };
+    if(ultimates[this.ultimateType]) {
+      ultimates[this.ultimateType].call(this);
+      this.ultimate = 0;
     }
-  }
-  
-  draw(){ 
-    ctx.fillStyle = this.color; 
-    if(this.type === 'lightning') {
-      // Draw lightning bolt effect
-      ctx.fillRect(this.x-2, this.y, 4, this.h);
-      ctx.fillRect(this.x-6, this.y+10, 12, 4);
-      ctx.fillRect(this.x-4, this.y+20, 8, 4);
-    } else {
-      ctx.fillRect(this.x,this.y,this.w,this.h); 
-      if(this.type === 'ultimate') {
-        // Glowing effect for ultimates
-        ctx.fillStyle = 'rgba(255,255,255,0.3)';
-        ctx.fillRect(this.x+5,this.y+5,this.w-10,this.h-10);
-      }
-    }
-  }
-}
-
-function rectsOverlap(a,b){ return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y; }
-
-// Globals
-const stage = new Stage();
-const effects = [];
-const projectiles = [];
-const particles = [];
-let shake = {time:0,magnitude:0};
-
-const p1 = new Player(1, stage.spawnPoints[0].x, stage.spawnPoints[0].y, {left:'KeyA',right:'KeyD',up:'KeyW',down:'KeyS',attack:'KeyF',special:'KeyG',ultimate:'KeyH'});
-const p2 = new Player(2, stage.spawnPoints[1].x, stage.spawnPoints[1].y, {left:'ArrowLeft',right:'ArrowRight',up:'ArrowUp',down:'ArrowDown',attack:'KeyK',special:'KeyL',ultimate:'Semicolon'});
-let cpuEnabled = false; let cpuDifficulty = 'med';
-
-// basic CPU controller for p2 when enabled
-function updateCPU(dt){
-  if(!cpuEnabled) return;
-  const ai = p2; const target = p1;
-  if(!ai.alive) return;
-  // movement: approach target
   const dx = (target.x - ai.x);
   if(Math.abs(dx) > 60){ if(dx<0) ai.vx -= 1200*dt; else ai.vx += 1200*dt; }
   // jump if player is above and close

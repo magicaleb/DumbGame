@@ -13,10 +13,10 @@
         <div id="start-screen" class="overlay">
           <h1>DumbGame</h1>
           <p>Enhanced Fighter — Pick your style!</p>
-          
+          <a href="how-to-play.html" style="color:#33ccff;text-decoration:underline;display:block;margin-bottom:18px;">How to Play / Controls & Abilities</a>
           <div id="character-select">
             <div class="player-setup">
-              <h3>Player 1 (WASD+F/G/H)</h3>
+              <h3>Player 1</h3>
               <div class="special-grid">
                 <label><input type="radio" name="p1-special" value="fireball" checked> 🔥 Fireball</label>
                 <label><input type="radio" name="p1-special" value="dash"> 🚀 Dash</label>
@@ -27,9 +27,9 @@
               <div class="ultimate-grid">
                 <label><input type="radio" name="p1-ultimate" value="meteor" checked> ☄️ Meteor Storm</label>
                 <label><input type="radio" name="p1-ultimate" value="chronos"> ⏰ Time Freeze</label>
-                <label><input type="radio" name="p1-ultimate" value="shadow"> 👥 Shadow Clone</label>
+                <label><input type="radio" name="p1-ultimate" value="cyclone"> 🌪️ Cyclone Fury</label>
+                <label><input type="radio" name="p1-ultimate" value="magnet"> 🧲 Magnet Mayhem</label>
                 <label><input type="radio" name="p1-ultimate" value="blitz"> ⚡ Lightning Blitz</label>
-                <label><input type="radio" name="p1-ultimate" value="gravity"> 🌑 Gravity Well</label>
               </div>
               <div class="stat-sliders">
                 <label>Speed: <input type="range" id="p1-speed" min="0.5" max="1.5" step="0.1" value="1.0"></label>
@@ -37,9 +37,8 @@
                 <label>Defense: <input type="range" id="p1-defense" min="0.5" max="1.5" step="0.1" value="1.0"></label>
               </div>
             </div>
-            
             <div class="player-setup">
-              <h3>Player 2 (Arrows+K/L/;)</h3>
+              <h3>Player 2</h3>
               <div class="special-grid">
                 <label><input type="radio" name="p2-special" value="fireball"> 🔥 Fireball</label>
                 <label><input type="radio" name="p2-special" value="dash" checked> 🚀 Dash</label>
@@ -50,9 +49,9 @@
               <div class="ultimate-grid">
                 <label><input type="radio" name="p2-ultimate" value="meteor"> ☄️ Meteor Storm</label>
                 <label><input type="radio" name="p2-ultimate" value="chronos"> ⏰ Time Freeze</label>
-                <label><input type="radio" name="p2-ultimate" value="shadow"> 👥 Shadow Clone</label>
+                <label><input type="radio" name="p2-ultimate" value="cyclone"> 🌪️ Cyclone Fury</label>
+                <label><input type="radio" name="p2-ultimate" value="magnet"> 🧲 Magnet Mayhem</label>
                 <label><input type="radio" name="p2-ultimate" value="blitz" checked> ⚡ Lightning Blitz</label>
-                <label><input type="radio" name="p2-ultimate" value="gravity"> 🌑 Gravity Well</label>
               </div>
               <div class="stat-sliders">
                 <label>Speed: <input type="range" id="p2-speed" min="0.5" max="1.5" step="0.1" value="1.0"></label>
@@ -69,7 +68,6 @@
             <label>AI Difficulty: <select id="opt-diff"><option value="easy">Easy</option><option value="med" selected>Normal</option><option value="hard">Hard</option></select></label>
           </div>
           <button id="btn-start">Start Match</button>
-          <p class="hint">Move: A/D or ←/→ • Jump: W or ↑ (double-tap for double jump) • Attack: F or K (+ direction for up/down attacks) • Special: G or L • Ultimate: H or ; • Pause: ESC</p>
         </div>
 
         <div id="end-screen" class="overlay hidden">
