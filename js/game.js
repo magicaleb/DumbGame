@@ -219,6 +219,20 @@ class Player{
       t: 1.0, 
       vy: -100
     });
+    
+    // Add impact particles based on damage
+    const particleCount = Math.min(15, Math.floor(dmg * 1.5));
+    for(let i = 0; i < particleCount; i++) {
+      particles.push({
+        x: this.x + this.w/2 + (Math.random() - 0.5) * 30,
+        y: this.y + this.h/2 + (Math.random() - 0.5) * 30,
+        vx: (Math.random() - 0.5) * 400,
+        vy: Math.random() * -300,
+        t: 0.6 + Math.random() * 0.4,
+        col: dmg > 15 ? '#f44' : '#fa4',
+        s: 2 + Math.random() * 2
+      });
+    }
   }
   update(dt, stage, other){
     if(!this.alive){ this.respawnTimer -= dt; if(this.respawnTimer<=0){ this.respawn(); } return; }
@@ -284,15 +298,15 @@ class Player{
 
     // special ability
     if(special && this.attackCooldown<=0 && !this.specialCooldown){ 
-      this.attackCooldown = 0.3; 
-      this.specialCooldown = 0.8; // Reduced cooldown for more fun
+      this.attackCooldown = 0.2; // Reduced from 0.3 for better flow
+      this.specialCooldown = 0.6; // Reduced from 0.8 for more frequent use
       this.doSpecial(); 
     }
     
     // ultimate ability (new key binding)
     const ultimate = input.isDown(this.controls.ultimate);
     if(ultimate && this.ultimate >= 100 && this.ultimateCooldown <= 0){
-      this.ultimateCooldown = 3.0;
+      this.ultimateCooldown = 2.5; // Reduced from 3.0 for more frequent ultimates
       this.doUltimate();
     }
     
@@ -366,7 +380,7 @@ class Player{
     
     // Ultimate charging - charge from dealing/taking damage and combat activity
     if(this.ultimate < 100) {
-      this.ultimate += dt * 8; // Passive charge
+      this.ultimate += dt * 12; // Increased from 8 for faster charging
       this.ultimate = Math.min(100, this.ultimate);
     }    // re-enable grabbing after some frames
     if(!this.canGrab){ this.canGrab = true; }
@@ -424,7 +438,7 @@ class Player{
         other.invulnerable = 0.1;
         
         // Charge ultimate from successful hits
-        this.ultimate = Math.min(100, this.ultimate + (isDashAttack ? 15 : 8));
+        this.ultimate = Math.min(100, this.ultimate + (isDashAttack ? 20 : 12)); // Increased charge from hits
       }
     }
   }
@@ -770,23 +784,52 @@ function updateCPU(dt){
   if(!cpuEnabled) return;
   const ai = p2; const target = p1;
   if(!ai.alive) return;
-  // movement: approach target
+  
+  // Difficulty scaling
+  const difficultyMult = {easy: 0.5, med: 1.0, hard: 1.8}[cpuDifficulty] || 1.0;
+  const reactionTime = {easy: 0.3, med: 0.15, hard: 0.05}[cpuDifficulty] || 0.15;
+  
+  // movement: approach target with some intelligence
   const dx = (target.x - ai.x);
-  if(Math.abs(dx) > 60){ if(dx<0) ai.vx -= 1200*dt; else ai.vx += 1200*dt; }
-  // jump if player is above and close
-  if(target.y + 20 < ai.y && Math.abs(dx) < 160 && Math.random() < (cpuDifficulty==='hard'?0.1:0.04)){
+  const dy = (target.y - ai.y);
+  
+  // More intelligent movement based on distance and situation
+  if(Math.abs(dx) > 80 * difficultyMult){ 
+    if(dx < 0) ai.vx -= 1400 * dt * difficultyMult; 
+    else ai.vx += 1400 * dt * difficultyMult; 
+  }
+  
+  // Smart jumping - jump if target is above or to reach platforms
+  const shouldJump = (target.y + 40 < ai.y && Math.abs(dx) < 200) || 
+                     (ai.y > target.y + 100 && Math.abs(dx) < 300);
+  if(shouldJump && Math.random() < reactionTime * difficultyMult){
     if(ai.onGround) { ai.vy = -720; ai.onGround=false; SoundManager.sfxJump(); }
   }
-  // attack if close
-  if(Math.abs(dx) < 80 && Math.random() < (cpuDifficulty==='hard'?0.12:0.06)){
-    if(ai.attackCooldown<=0){ ai.attackCooldown = 0.3; ai.doAttack(p1); }
-  }
-  // special occasionally
-  if(Math.abs(dx) > 200 && Math.random() < 0.02 && ai.specialCooldown<=0){ ai.specialCooldown = 1.2; ai.doSpecial(); }
   
-  // ultimate if charged and close
-  if(ai.ultimate >= 100 && Math.abs(dx) < 120 && Math.random() < 0.08 && ai.ultimateCooldown <= 0){
-    ai.ultimateCooldown = 3.0; ai.doUltimate();
+  // attack if close with better timing
+  const attackChance = {easy: 0.03, med: 0.08, hard: 0.15}[cpuDifficulty] || 0.08;
+  if(Math.abs(dx) < 90 && Math.abs(dy) < 60 && Math.random() < attackChance){
+    if(ai.attackCooldown<=0){ ai.attackCooldown = 0.25; ai.doAttack(p1); }
+  }
+  
+  // special with strategic timing
+  const specialChance = {easy: 0.008, med: 0.015, hard: 0.03}[cpuDifficulty] || 0.015;
+  const goodSpecialRange = Math.abs(dx) > 150 || (Math.abs(dx) < 60 && ai.specialType === 'counter');
+  if(goodSpecialRange && Math.random() < specialChance && ai.specialCooldown<=0){ 
+    ai.specialCooldown = 0.6; ai.doSpecial(); 
+  }
+  
+  // ultimate with smart usage
+  const ultChance = {easy: 0.02, med: 0.06, hard: 0.12}[cpuDifficulty] || 0.06;
+  if(ai.ultimate >= 100 && Math.abs(dx) < 150 && Math.random() < ultChance && ai.ultimateCooldown <= 0){
+    ai.ultimateCooldown = 2.5; ai.doUltimate();
+  }
+  
+  // Defensive behavior on hard difficulty
+  if(cpuDifficulty === 'hard' && target.attackCooldown > 0.15 && Math.abs(dx) < 100) {
+    // Try to move away from incoming attacks
+    if(dx > 0) ai.vx -= 800 * dt;
+    else ai.vx += 800 * dt;
   }
 }
 
@@ -876,17 +919,49 @@ function draw(){
   ctx.restore();
 }
 
-function showStart(){ startScreen.classList.remove('hidden'); endScreen.classList.add('hidden'); }
+function showStart(){ 
+  startScreen.classList.remove('hidden'); 
+  endScreen.classList.add('hidden'); 
+  // Add fade in effect
+  startScreen.style.opacity = '0';
+  setTimeout(() => { startScreen.style.opacity = '1'; }, 50);
+}
+
 function startMatch(){ 
   applyCharacterCustomization();
-  startScreen.classList.add('hidden'); 
-  endScreen.classList.add('hidden'); 
-  running=true; 
-  last=performance.now(); 
-  SoundManager.init(); 
-  requestAnimationFrame(update); 
+  
+  // Add fade out effect
+  startScreen.style.opacity = '0';
+  setTimeout(() => {
+    startScreen.classList.add('hidden'); 
+    endScreen.classList.add('hidden'); 
+    running=true; 
+    last=performance.now(); 
+    SoundManager.init(); 
+    requestAnimationFrame(update);
+  }, 300);
 }
-function showEnd(){ endScreen.classList.remove('hidden'); startScreen.classList.add('hidden'); endTitle.textContent = p1.stocks>p2.stocks ? 'Player 1 Wins!' : 'Player 2 Wins!'; }
+
+function showEnd(){ 
+  endScreen.classList.remove('hidden'); 
+  startScreen.classList.add('hidden'); 
+  endTitle.textContent = p1.stocks>p2.stocks ? 'Player 1 Wins!' : 'Player 2 Wins!'; 
+  
+  // Add celebration effect
+  for(let i = 0; i < 50; i++) {
+    setTimeout(() => {
+      particles.push({
+        x: W/2 + (Math.random() - 0.5) * 400,
+        y: H/4 + (Math.random() - 0.5) * 200,
+        vx: (Math.random() - 0.5) * 300,
+        vy: Math.random() * -400,
+        t: 2.0,
+        col: ['#ff0', '#f0f', '#0ff', '#f80'][Math.floor(Math.random() * 4)],
+        s: 4 + Math.random() * 4
+      });
+    }, i * 50);
+  }
+}
 
 btnStart.addEventListener('click', ()=>{
   // read options
@@ -961,7 +1036,7 @@ function drawHUD(){
   ctx.fillText('Special', W-80, 85);
   
   if(p1.specialCooldown>0){ 
-    const w = Math.max(0, Math.min(80, (p1.specialCooldown/0.8)*80)); 
+    const w = Math.max(0, Math.min(80, (p1.specialCooldown/0.6)*80)); // Updated to match new cooldown
     ctx.fillStyle='#333'; ctx.fillRect(16,88,80,10); 
     ctx.fillStyle='#ff6666'; ctx.fillRect(16,88,w,10); 
   } else { 
@@ -970,7 +1045,7 @@ function drawHUD(){
   }
   
   if(p2.specialCooldown>0){ 
-    const w2 = Math.max(0, Math.min(80, (p2.specialCooldown/0.8)*80)); 
+    const w2 = Math.max(0, Math.min(80, (p2.specialCooldown/0.6)*80)); // Updated to match new cooldown
     ctx.fillStyle='#333'; ctx.fillRect(W-130,88,80,10); 
     ctx.fillStyle='#ff6666'; ctx.fillRect(W-130,88,w2,10); 
   } else { 
