@@ -69,12 +69,19 @@
             <label>AI Difficulty: <select id="opt-diff"><option value="easy">Easy</option><option value="med" selected>Normal</option><option value="hard">Hard</option></select></label>
           </div>
           <button id="btn-start">Start Match</button>
-          <p class="hint">Move: A/D or ←/→ • Jump: W or ↑ • Attack: F or K (+ direction for up/down attacks) • Special: G or L • Ultimate: H or ;</p>
+          <p class="hint">Move: A/D or ←/→ • Jump: W or ↑ (double-tap for double jump) • Attack: F or K (+ direction for up/down attacks) • Special: G or L • Ultimate: H or ; • Pause: ESC</p>
         </div>
 
         <div id="end-screen" class="overlay hidden">
           <h1 id="end-title">Player X Wins!</h1>
           <button id="btn-restart">Restart Match</button>
+        </div>
+
+        <div id="pause-screen" class="overlay hidden">
+          <h1>Game Paused</h1>
+          <button id="btn-resume">Resume Game</button>
+          <button id="btn-main-menu">Main Menu</button>
+          <p class="hint">Press ESC to resume</p>
         </div>
 
         <div id="hud">
